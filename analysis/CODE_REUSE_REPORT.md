@@ -1,6 +1,6 @@
 # Code Reuse Report: Reference Repos → AMF Modules
 
-*Generated: 2026-05-20 | Based on source code analysis of 7 reference systems*
+*Generated: 2026-05-20 | Updated: 2026-05-20 (all 12 repos analyzed)*
 
 ---
 
@@ -16,6 +16,10 @@
 | **CortexGraph** | AGPL-3.0 | **NO** (copyleft) | Yes (algorithms not copyrightable) |
 | **basic-memory** | AGPL-3.0 | **NO** (copyleft) | Yes (algorithms not copyrightable) |
 | **mcp-mem0** | MIT | Yes | Yes |
+| **GraphRAG** | MIT | Yes | Yes |
+| **LightRAG** | MIT | Yes | Yes |
+| **Cognee** | Apache 2.0 | Yes (with attribution) | Yes |
+| **Letta** | Apache 2.0 | Yes (with attribution) | Yes |
 
 **Rule**: For CortexGraph and basic-memory, we can study the algorithms and do clean-room reimplementation, but cannot copy any code verbatim.
 
@@ -441,6 +445,308 @@ def blend_with_review(primary: list, review_candidates: list, blend_ratio=0.3) -
 
 ---
 
+## Module 9: Entity Extraction (from GraphRAG + LightRAG)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **GraphRAG** | `graphrag/index/operations/extract_graph/graph_extractor.py:38-178` | Entity/relation extraction with multi-pass gleaning + tuple-delimiter parsing | MIT — **copy directly** |
+| **GraphRAG** | `graphrag/prompts/index/extract_graph.py:6-130` | Extraction prompt (structured tuple output, not JSON) | MIT — **copy directly** |
+| **LightRAG** | `lightrag/operate.py:937-1062` | Resilient parser with `fix_tuple_delimiter_corruption` | MIT — **copy directly** |
+| **LightRAG** | `lightrag/prompt.py:11-183` | Extraction prompts + 3 few-shot examples | MIT — **copy directly** |
+
+### Key Pattern: Gleaning (multi-pass extraction)
+
+Both GraphRAG and LightRAG use a "gleaning" strategy: after initial extraction, ask the LLM "did you miss anything?" for a second pass. This improves entity recall by ~15-20%.
+
+```python
+# From GraphRAG (MIT):
+# 1. Initial extraction
+result = await llm(EXTRACT_PROMPT.format(input_text=chunk))
+# 2. Gleaning passes
+for i in range(max_gleanings):
+    result += await llm(CONTINUE_PROMPT)  # "Are there more entities?"
+    if await llm(LOOP_PROMPT) == "NO":    # "Should we keep going?"
+        break
+```
+
+---
+
+## Module 10: Community Detection + Hierarchical Summarization (from GraphRAG)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **GraphRAG** | `graphrag/graphs/hierarchical_leiden.py:1-55` | Leiden clustering via `graspologic_native` (5 lines of actual logic) | MIT — **copy directly** |
+| **GraphRAG** | `graphrag/index/operations/cluster_graph.py:1-99` | Full integration: edge normalization → LCC → hierarchy construction | MIT — **copy directly** |
+| **GraphRAG** | `graphrag/index/operations/summarize_communities/community_reports_extractor.py:52-103` | Per-community LLM report generation with Pydantic structured output | MIT — **copy directly** |
+| **GraphRAG** | `graphrag/query/structured_search/global_search/search.py:55-522` | Map-reduce search over community reports with semaphore concurrency | MIT — adapt |
+
+### AMF Relevance
+
+Community detection could help AMF's consolidation engine: cluster related memory nodes → generate cluster summaries → use for hierarchical retrieval. The map-reduce global search pattern is applicable to "summarize all memories about topic X" queries.
+
+---
+
+## Module 11: Pluggable Storage Backends (from LightRAG)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **LightRAG** | `lightrag/base.py:218-353` | `BaseVectorStorage` ABC (query, upsert, delete, batch ops) | MIT — **copy directly** |
+| **LightRAG** | `lightrag/base.py:356-402` | `BaseKVStorage` ABC (get_by_id, filter_keys, upsert) | MIT — **copy directly** |
+| **LightRAG** | `lightrag/base.py:405-750` | `BaseGraphStorage` ABC (nodes, edges, batch, discovery) | MIT — **copy directly** |
+| **LightRAG** | `lightrag/base.py:810-876` | `DocStatusStorage` (document processing tracking) | MIT — **copy directly** |
+| **GraphRAG** | `graphrag_storage/storage.py:13-135` | `Storage` ABC (find, get, set, has, delete, child) + factory pattern | MIT — **copy directly** |
+
+### Key Pattern: Batch Operations with Serial Default
+
+```python
+# From LightRAG (MIT):
+class BaseGraphStorage:
+    async def upsert_nodes_batch(self, nodes: list[dict]) -> None:
+        """Override for performance. Default: sequential."""
+        for node in nodes:
+            await self.upsert_node(node["id"], node)
+```
+
+This lets you start with a simple implementation and optimize later without changing the interface.
+
+---
+
+## Module 12: Concurrent Write Safety (from LightRAG)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **LightRAG** | `lightrag/kg/shared_storage.py:529-815` | `KeyedUnifiedLock` — per-entity lock with deadlock prevention | MIT — adapt |
+
+### Key Design Decisions
+
+```python
+# From LightRAG (MIT):
+# 1. Sort keys before acquiring (prevents deadlocks)
+keys = sorted(keys)
+# 2. Reference counting with deferred cleanup (avoids memory leaks)
+# 3. asyncio.shield on release (ensures locks freed under cancellation)
+# 4. Dual-mode: asyncio.Lock (single-process) or multiprocessing.Lock
+```
+
+AMF can use a simplified version for single-process: just `dict[str, asyncio.Lock]` with sorted key acquisition.
+
+---
+
+## Module 13: Entity Description Merging (from LightRAG)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **LightRAG** | `lightrag/operate.py:167-301` | `_handle_entity_relation_summary` — iterative map-reduce for accumulating descriptions | MIT — **copy directly** |
+| **LightRAG** | `lightrag/operate.py:1623-1872` | `_merge_nodes_then_upsert` — full entity merge with type voting, source_id FIFO | MIT — adapt |
+
+### Algorithm (from LightRAG, MIT):
+
+```python
+def merge_descriptions(descriptions: list[str], max_tokens: int) -> str:
+    if len(descriptions) == 1:
+        return descriptions[0]  # No LLM needed
+    total_tokens = sum(count_tokens(d) for d in descriptions)
+    if total_tokens <= max_tokens and len(descriptions) < threshold:
+        return "\n".join(descriptions)  # Join without LLM
+    if total_tokens <= max_tokens:
+        return await llm_summarize(descriptions)  # Single LLM call
+    # Map-reduce for large sets:
+    chunks = split_into_chunks(descriptions, max_tokens)
+    summaries = [await llm_summarize(chunk) for chunk in chunks]
+    return await merge_descriptions(summaries, max_tokens)  # Recurse
+```
+
+---
+
+## Module 14: In-Context Memory Blocks + Agent Self-Editing (from Letta)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Letta** | `letta/schemas/block.py:13-67` | `Block` Pydantic model (value, limit, label, read_only, description) | Apache 2.0 — adapt |
+| **Letta** | `letta/schemas/memory.py:143-349` | Block rendering into system prompt (XML tags, line-numbered, git mode) | Apache 2.0 — adapt |
+| **Letta** | `letta/functions/function_sets/base.py:311-517` | 4 memory tools (replace, insert, rethink, apply_patch) | Apache 2.0 — adapt |
+
+### AMF Relevance
+
+AMF's "hot tier" (always-injected memories) maps directly to Letta's core memory blocks. The agent self-editing tools (replace, insert, rethink) are a proven pattern for letting the agent manage its own memory without external extraction.
+
+```python
+# From Letta (Apache 2.0):
+# memory_replace: validates old_string uniqueness, str.replace()
+# memory_insert: splits by newlines, inserts at position
+# memory_rethink: full rewrite of block value
+# memory_apply_patch: unified-diff application
+```
+
+---
+
+## Module 15: Background Consolidation Agent (from Letta)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Letta** | `letta/groups/sleeptime_multi_agent.py:24-292` | Sleeptime agent: frequency-based trigger, background thread, transcript → memory tools | Apache 2.0 — adapt |
+| **Letta** | `letta/prompts/system_prompts/sleeptime_v2.py` | System prompt for consolidation agent | Apache 2.0 — reference |
+
+### Key Pattern:
+
+```python
+# From Letta (Apache 2.0):
+# Every N turns, spawn a background consolidation agent
+if turns_counter % sleeptime_frequency == 0:
+    thread = Thread(target=run_sleeptime_agent, args=(transcript,))
+    thread.start()
+# The sleeptime agent has access to memory_rethink/replace/insert
+# and reorganizes memory blocks based on recent conversation
+```
+
+AMF's "slow path" (async consolidation) can use this exact pattern: a background agent that periodically processes new memories and triggers state transitions, merges, or promotions.
+
+---
+
+## Module 16: Git-Backed Memory Versioning (from Letta)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Letta** | `letta/services/memory_repo/git_operations.py:49-638` | Full git commit flow: lock → checkout → apply changes → commit → upload delta | Apache 2.0 — adapt |
+| **Letta** | `letta/services/memory_repo/memfs_client_base.py:36-340` | Async CRUD client for git-backed blocks (create/update/delete/get at any ref) | Apache 2.0 — adapt |
+
+### AMF Relevance
+
+Since AMF uses Markdown files as source of truth, git versioning is a natural fit for audit trails. Letta stores blocks as `{label}.md` with YAML frontmatter — identical to AMF's format. The `MemfsClient` interface provides history, diff, and rollback for free.
+
+---
+
+## Module 17: Feedback-Weighted Retrieval (from Cognee)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Cognee** | `cognee/tasks/memify/apply_feedback_weights.py` | Streaming EMA weight update: `new = old + α*(rating - old)` | Apache 2.0 — adapt |
+| **Cognee** | `cognee/modules/graph/cognee_graph/CogneeGraph.py:464-486` | Blended scoring: `effective_dist = (1-influence)*vector_dist + influence*(1-feedback_weight)` | Apache 2.0 — adapt |
+
+### AMF Integration
+
+Add `feedback_weight: float = 0.5` to MemoryNode. When user confirms/corrects a memory, update via EMA. Blend into retrieval scoring as a multiplicative boost.
+
+```python
+# From Cognee (Apache 2.0):
+def update_feedback(current_weight: float, user_rating: int, alpha=0.1) -> float:
+    normalized = (user_rating - 1) / 4  # 1-5 → 0.0-1.0
+    return current_weight + alpha * (normalized - current_weight)
+```
+
+---
+
+## Module 18: Session Cache with TTL (from Cognee)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Cognee** | `cognee/infrastructure/databases/cache/cache_db_interface.py` | `CacheDBInterface` ABC (create_qa_entry, get_all, delete_session) | Apache 2.0 — adapt |
+| **Cognee** | `cognee/infrastructure/databases/cache/redis/RedisAdapter.py:163-166` | TTL via `redis.expire(key, ttl_seconds)` | Apache 2.0 — adapt |
+
+### AMF Integration
+
+AMF's Session scope memories should auto-expire. Use Cognee's pattern: `session_ttl_seconds = 604800` (7 days), applied on every write to session-scoped memories.
+
+---
+
+## Module 19: Agent Memory Decorator (from Cognee)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Cognee** | `cognee/modules/agent_memory/decorator.py:23-119` | `@agent_memory` decorator: pre-call retrieval + post-call trace persistence | Apache 2.0 — adapt |
+| **Cognee** | `cognee/modules/agent_memory/runtime.py` | Runtime: resolve query → recall → inject context → execute → save trace | Apache 2.0 — adapt |
+
+### Key Pattern:
+
+```python
+# From Cognee (Apache 2.0):
+@agent_memory(with_memory=True, memory_top_k=5, persist_session_trace_after=10)
+async def my_agent(user_input: str) -> str:
+    # Pre-call: AMF retrieves relevant memories, injects as context
+    # Post-call: AMF saves execution trace to session cache
+    # Every 10th call: persist traces into permanent graph
+    ...
+```
+
+---
+
+## Module 20: Optimistic Locking + Audit Trail (from Letta)
+
+### Best Sources
+
+| Source | File | What | Adoptability |
+|--------|------|------|-------------|
+| **Letta** | `letta/orm/block.py:56-61` | SQLAlchemy `version_id_col` for optimistic locking | Apache 2.0 — adapt |
+| **Letta** | `letta/orm/block_history.py:12-48` | `BlockHistory` table: full snapshot per change with sequence_number | Apache 2.0 — adapt |
+
+### AMF Integration
+
+Add to SQLite schema:
+```sql
+ALTER TABLE nodes ADD COLUMN version INTEGER DEFAULT 1;
+CREATE TABLE node_history (
+    id TEXT PRIMARY KEY,
+    node_id TEXT REFERENCES nodes(id),
+    sequence_number INTEGER NOT NULL,
+    state TEXT, content TEXT, modified TEXT,
+    actor_type TEXT, actor_id TEXT
+);
+```
+
+---
+
+## Updated Priority Matrix (all 12 repos)
+
+| AMF Module | Best Copyable Source | Effort | Phase |
+|------------|---------------------|--------|-------|
+| `mcp_server/server.py` | mcp-mem0 (MIT, template) | Low | Phase 4 |
+| `read/scorer.py` — RRF | Hindsight (MIT, 70 lines) | Low | Phase 3 |
+| `read/scorer.py` — PPR | GAAMA (MIT, 70 lines) | Low | Phase 3 |
+| `read/scorer.py` — multiplicative boost | Hindsight (MIT, 30 lines) | Low | Phase 3 |
+| `read/scorer.py` — feedback weight | Cognee (Apache 2.0) | Low | Phase 3 |
+| `lifecycle/decay.py` — heat score | MemoryOS (Apache 2.0) | Low | Phase 2 |
+| `write/router.py` — hash dedup | Mem0 (Apache 2.0, 5 lines) | Low | Phase 2 |
+| `write/extractor.py` — extraction prompt | Mem0 + LightRAG (MIT) | Low | Phase 2 |
+| `storage/sqlite_store.py` — FTS5 schema | Clean-room (basic-memory inspired) | Medium | Phase 1 |
+| `storage/sqlite_store.py` — optimistic locking | Letta pattern (Apache 2.0) | Low | Phase 1 |
+| `storage/graph.py` — construction | GAAMA (MIT, full pipeline) | Medium | Phase 3 |
+| `storage/graph.py` — entity extraction | GraphRAG (MIT, gleaning) | Medium | Phase 3 |
+| `storage/graph.py` — community detection | GraphRAG (MIT, Leiden wrapper) | Low | Phase 3+ |
+| `storage/graph.py` — description merging | LightRAG (MIT, map-reduce) | Medium | Phase 3 |
+| `storage/graph.py` — concurrent locks | LightRAG (MIT, keyed lock) | Medium | Phase 3 |
+| `lifecycle/state_machine.py` — promotion | Clean-room (CortexGraph inspired) | Medium | Phase 2 |
+| `core/engine.py` — sleeptime consolidation | Letta pattern (Apache 2.0) | Medium | Phase 2 |
+| `core/engine.py` — agent memory decorator | Cognee (Apache 2.0) | Medium | Phase 4 |
+| `read/gateway.py` — spaced repetition | Clean-room (CortexGraph inspired) | Medium | Phase 3 |
+| `storage/` — git versioning | Letta (Apache 2.0, 600 lines) | High | Phase 4+ |
+| `write/router.py` — LLM classification | Hindsight pattern (MIT) | High | Phase 2 |
+| `storage/graph.py` — GEL self-healing | GAAMA (MIT, 800 lines) | High | Phase 3+ |
+| `core/` — map-reduce global search | GraphRAG (MIT, full impl) | High | Phase 3+ |
+
+---
+
 ## Attribution Requirements
 
 For the final AMF project, include in NOTICE or README:
@@ -450,8 +756,12 @@ This project incorporates or adapts code from:
 - GAAMA (MIT) — Personalized PageRank, graph construction, scoring fusion
 - HippoRAG (MIT) — Knowledge graph architecture reference
 - Hindsight (MIT) — Reciprocal Rank Fusion, multiplicative scoring
+- GraphRAG (MIT) — Entity extraction with gleaning, Leiden community detection, map-reduce search
+- LightRAG (MIT) — Storage base classes, keyed concurrent locks, entity description merging
 - Mem0 (Apache 2.0) — Hybrid scoring, BM25 normalization, hash dedup
 - MemoryOS (Apache 2.0) — Heat-based scoring formula
+- Cognee (Apache 2.0) — Feedback-weighted retrieval, session TTL cache, agent memory decorator
+- Letta (Apache 2.0) — Memory block model, agent self-editing tools, sleeptime consolidation, git versioning, optimistic locking
 - mcp-mem0 (MIT) — MCP server template pattern
 
 Algorithms inspired by (clean-room reimplemented):
