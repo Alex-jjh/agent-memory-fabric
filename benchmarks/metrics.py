@@ -73,9 +73,9 @@ def staleness_intrusion_rate(
     return stale_in_top_k / len(top_k)
 
 
-def qa_accuracy_exact(retrieved: list[MemoryNode], gold_answer: str) -> bool:
+def qa_accuracy_exact(retrieved: list[MemoryNode], gold_answer: str | int | float) -> bool:
     """Check if any retrieved memory contains the gold answer (substring match)."""
-    gold_lower = gold_answer.lower().strip()
+    gold_lower = str(gold_answer).lower().strip()
     for node in retrieved:
         if gold_lower in node.content.lower():
             return True

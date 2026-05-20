@@ -140,11 +140,22 @@ class ExperimentHarness:
         self,
         sessions: list[ConversationSession],
         questions: list[EvalQuestion],
+        simulate_time_gap: bool = True,
     ) -> ExperimentMetrics:
-        """Run the complete experiment: ingest all sessions, then evaluate all questions."""
-        # Phase 1: Ingest
-        for session in sessions:
-            self.ingest_session(session)
+        """Run the complete experiment: ingest all sessions, then evaluate all questions.
+
+        If simulate_time_gap=True, artificially ages memories between sessions
+        by backdating their last_accessed times to simulate temporal spread.
+        """
+        # Phase 1: Ingest with simulated time gaps
+        for i, session in enumerate(sessions):
+            ids = self.ingest_session(session)
+
+            if simulate_time_gap and ids:
+                days_ago = (len(sessions) - i) * self.config.time_gap_between_sessions_hours / 24
+                self._backdate_memories(ids, days_ago)
+
+            self.condition.after_session(self.engine)
 
         # Phase 2: Evaluate
         results = []
@@ -154,6 +165,19 @@ class ExperimentHarness:
 
         # Phase 3: Aggregate
         return self._aggregate_metrics(results)
+
+    def _backdate_memories(self, node_ids: list[str], days_ago: float) -> None:
+        """Artificially age memories to simulate time passing between sessions."""
+        from datetime import timedelta
+        delta = timedelta(days=days_ago)
+        for node_id in node_ids:
+            node = self.engine.read(node_id)
+            if node:
+                node.last_accessed = node.last_accessed - delta
+                node.created = node.created - delta
+                node.modified = node.modified - delta
+                self.engine.markdown_store.write(node)
+                self.engine.sqlite_store.upsert_node(node, content=node.content)
 
     def _aggregate_metrics(self, results: list[dict]) -> ExperimentMetrics:
         """Aggregate per-query results into experiment-level metrics."""

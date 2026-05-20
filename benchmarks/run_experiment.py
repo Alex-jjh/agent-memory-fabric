@@ -185,33 +185,69 @@ def generate_synthetic_data(
     return sessions, questions[:num_questions]
 
 
-def load_locomo_data(data_path: Path) -> tuple[list[ConversationSession], list[EvalQuestion]]:
-    """Load LoCoMo dataset from JSON file."""
+LOCOMO_CATEGORIES = {
+    1: "single_hop",
+    2: "temporal",
+    3: "open_ended",
+    4: "multi_hop",
+    5: "knowledge_update",
+}
+
+
+def load_locomo_data(
+    data_path: Path, max_entries: int | None = None
+) -> tuple[list[ConversationSession], list[EvalQuestion]]:
+    """Load LoCoMo dataset from JSON file.
+
+    LoCoMo format:
+    - Each entry has a 'conversation' dict with session_1..session_N (lists of turns)
+    - Each turn: {"speaker": "Name", "dia_id": "D1:1", "text": "..."}
+    - QA pairs: {"question": "...", "answer": "...", "evidence": ["D1:3"], "category": 1-5}
+    """
     with open(data_path) as f:
         data = json.load(f)
+
+    if max_entries:
+        data = data[:max_entries]
 
     sessions = []
     questions = []
 
-    for i, entry in enumerate(data):
-        conversation = entry.get("conversation", [])
-        turns = []
-        for turn in conversation:
-            turns.append({
-                "speaker": turn.get("speaker", f"Speaker{turn.get('speaker_id', 0)}"),
-                "utterance": turn.get("text", turn.get("utterance", "")),
-            })
+    for entry_idx, entry in enumerate(data):
+        conversation = entry.get("conversation", {})
 
-        sessions.append(ConversationSession(
-            session_id=f"locomo_{i}",
-            turns=turns,
-        ))
+        # Extract session keys (session_1, session_2, ...) in order
+        session_keys = sorted(
+            [k for k in conversation.keys() if k.startswith("session_") and not k.endswith("date_time")],
+            key=lambda x: int(x.split("_")[1]),
+        )
 
-        for qa in entry.get("questions", entry.get("qa_pairs", [])):
+        for sess_key in session_keys:
+            turns = conversation[sess_key]
+            formatted_turns = []
+            for turn in turns:
+                formatted_turns.append({
+                    "speaker": turn.get("speaker", "Unknown"),
+                    "utterance": turn.get("text", ""),
+                })
+
+            session_id = f"entry{entry_idx}_{sess_key}"
+            date_key = f"{sess_key}_date_time"
+            timestamp_str = conversation.get(date_key, "")
+
+            sessions.append(ConversationSession(
+                session_id=session_id,
+                turns=formatted_turns,
+            ))
+
+        # Load QA pairs
+        for qa in entry.get("qa", []):
+            cat_id = qa.get("category", 0)
+            category_name = LOCOMO_CATEGORIES.get(cat_id, f"cat_{cat_id}")
             questions.append(EvalQuestion(
                 question=qa.get("question", ""),
                 gold_answer=qa.get("answer", ""),
-                category=qa.get("category", qa.get("type", "unknown")),
+                category=category_name,
                 evidence_turns=qa.get("evidence", []),
             ))
 
@@ -226,6 +262,7 @@ def main():
     parser.add_argument("--top-k", type=int, default=5, help="Number of memories to retrieve")
     parser.add_argument("--sessions", type=int, default=5, help="Number of sessions (synthetic mode)")
     parser.add_argument("--questions", type=int, default=10, help="Number of questions (synthetic mode)")
+    parser.add_argument("--max-entries", type=int, default=None, help="Limit LoCoMo entries (for quick testing)")
     args = parser.parse_args()
 
     if not args.synthetic and not args.data:
@@ -240,7 +277,7 @@ def main():
         )
     else:
         print(f"Loading data from {args.data}...")
-        sessions, questions = load_locomo_data(args.data)
+        sessions, questions = load_locomo_data(args.data, max_entries=args.max_entries)
 
     print(f"Sessions: {len(sessions)}, Questions: {len(questions)}")
 
