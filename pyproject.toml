@@ -1,0 +1,50 @@
+[project]
+name = "agent-memory-fabric"
+version = "0.1.0"
+description = "Lifecycle-aware memory system for LLM agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Alex Jiang" },
+]
+keywords = ["llm", "agent", "memory", "lifecycle", "mcp"]
+
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "sentence-transformers>=2.2",
+    "sqlite-vec>=0.1",
+    "mcp>=1.0",
+    "click>=8.0",
+    "watchfiles>=0.20",
+    "pyyaml>=6.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "hypothesis>=6.0",
+    "ruff>=0.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_memory_fabric"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B"]
