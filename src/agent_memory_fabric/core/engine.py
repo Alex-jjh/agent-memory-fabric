@@ -128,6 +128,28 @@ class MemoryEngine:
             node_type = MemoryType(node_type)
 
         now = datetime.now(timezone.utc)
+        final_tags = tags or []
+        tag_set = {t.lower() for t in final_tags}
+
+        # Auto-detect anti-pattern from tags
+        is_anti_pattern = "anti-pattern" in tag_set
+
+        # Extract applicable_domains from "domain:xxx" tags
+        applicable_domains = [t.split(":", 1)[1] for t in final_tags if t.lower().startswith("domain:")]
+
+        # Set confidence priors from provenance tags
+        alpha, beta_val = 1.0, 1.0
+        for t in final_tags:
+            if t == "provenance:user_explicit":
+                alpha, beta_val = 9.0, 1.0
+                break
+            elif t == "provenance:synthesized":
+                alpha, beta_val = 3.0, 2.0
+                break
+            elif t == "provenance:inferred":
+                alpha, beta_val = 3.0, 7.0
+                break
+
         node = MemoryNode(
             name=name,
             content=content,
@@ -137,9 +159,13 @@ class MemoryEngine:
             created=now,
             modified=now,
             last_accessed=now,
-            tags=tags or [],
+            tags=final_tags,
             ttl=ttl,
             strength=strength,
+            is_anti_pattern=is_anti_pattern,
+            applicable_domains=applicable_domains,
+            confidence_alpha=alpha,
+            confidence_beta=beta_val,
         )
 
         self.markdown_store.write(node)

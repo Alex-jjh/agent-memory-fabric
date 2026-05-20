@@ -15,13 +15,14 @@ class PipelineConfig:
     memory_types: list[MemoryType]
     confidence_floor: float = 0.3
     relevance_threshold: float = 0.15
+    require_domains: bool = False
 
 
 DEFAULT_PIPELINES = [
     PipelineConfig(name="profile", budget_ratio=0.20, memory_types=[MemoryType.USER], confidence_floor=0.0),
     PipelineConfig(name="feedback", budget_ratio=0.30, memory_types=[MemoryType.FEEDBACK], confidence_floor=0.3),
     PipelineConfig(name="project", budget_ratio=0.30, memory_types=[MemoryType.PROJECT, MemoryType.REFERENCE]),
-    PipelineConfig(name="domain", budget_ratio=0.10, memory_types=[MemoryType.ENTITY], confidence_floor=0.0),
+    PipelineConfig(name="domain", budget_ratio=0.10, memory_types=[], confidence_floor=0.0, require_domains=True),
     PipelineConfig(name="carryover", budget_ratio=0.10, memory_types=[], confidence_floor=0.5),
 ]
 
@@ -71,6 +72,8 @@ class PipelineRetriever:
             if sm.node.id in already_selected:
                 continue
             if pipeline.memory_types and sm.node.type not in pipeline.memory_types:
+                continue
+            if pipeline.require_domains and not sm.node.applicable_domains:
                 continue
             if sm.total_score < pipeline.relevance_threshold:
                 continue
