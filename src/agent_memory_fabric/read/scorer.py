@@ -133,26 +133,17 @@ class MultiSignalScorer:
                 "frequency": frequency,
             }
 
-            # Compute weighted sum. Use BM25 weight from semantic slot when
-            # no vector scores provided; when both exist, split evenly.
-            if vector_scores:
-                bm25_weight = self.weights.semantic * 0.5
-                sem_weight = self.weights.semantic * 0.5
-            else:
-                bm25_weight = self.weights.semantic
-                sem_weight = 0.0
-
             raw_total = (
-                bm25_weight * bm25_norm
-                + sem_weight * semantic
-                + self.weights.graph_proximity * graph_prox
+                self.weights.bm25 * bm25_norm
+                + (self.weights.semantic * semantic if vector_scores else 0.0)
+                + (self.weights.graph_proximity * graph_prox if graph_scores else 0.0)
                 + self.weights.recency * recency
                 + self.weights.frequency * frequency
             )
 
-            # Normalize by sum of active weights
             active_sum = (
-                bm25_weight + sem_weight
+                self.weights.bm25
+                + (self.weights.semantic if vector_scores else 0.0)
                 + (self.weights.graph_proximity if graph_scores else 0.0)
                 + self.weights.recency
                 + self.weights.frequency

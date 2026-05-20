@@ -175,13 +175,26 @@ class WritePipeline:
         return node.id if node else None
 
     def _generate_manifest(self) -> str:
-        """Generate manifest of existing memories for extraction context."""
+        """Generate manifest from SQLite index (fast) instead of full vault scan."""
         from agent_memory_fabric.read.manifest import MemoryManifest
         if not hasattr(self, '_shared_manifest'):
             self._shared_manifest = MemoryManifest(max_lines=50)
-        nodes = [n for n in self.engine.markdown_store.list_all() if n.is_retrievable()]
-        if not nodes:
+
+        # Use SQLite metadata (no file I/O) for manifest generation
+        active = self.engine.sqlite_store.get_all_nodes(state="active")
+        decided = self.engine.sqlite_store.get_all_nodes(state="decided")
+        if not active and not decided:
             return ""
+
+        from agent_memory_fabric.core.node import MemoryNode, LifecycleState, MemoryType
+        from datetime import datetime
+        nodes = []
+        for row in active + decided:
+            nodes.append(MemoryNode(
+                id=row["id"], name=row["name"], content=row["name"],
+                type=MemoryType(row.get("type", "project")),
+                modified=datetime.fromisoformat(row["modified"]),
+            ))
         return self._shared_manifest.generate_cached(nodes, cache_key="_extraction")
 
     @property
