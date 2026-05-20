@@ -10,10 +10,13 @@ from agent_memory_fabric.write.extractor import (
 
 class TestGenerateName:
     def test_basic(self):
-        assert generate_name("User prefers dark mode") == "user-prefers-dark-mode"
+        name = generate_name("User prefers dark mode")
+        assert name.startswith("user-prefers-dark-mode-")
+        assert len(name) <= 50
 
     def test_strips_punctuation(self):
-        assert generate_name("Hello, world! How are you?") == "hello-world-how-are-you"
+        name = generate_name("Hello, world! How are you?")
+        assert name.startswith("hello-world-how-are-you-")
 
     def test_truncates_at_50(self):
         long = " ".join(["superlongword"] * 10)
@@ -21,10 +24,12 @@ class TestGenerateName:
         assert len(name) <= 50
 
     def test_empty_content(self):
-        assert generate_name("") == "unnamed"
+        name = generate_name("")
+        assert name.startswith("unnamed-")
 
     def test_only_punctuation(self):
-        assert generate_name("... ??? !!!") == "unnamed"
+        name = generate_name("... ??? !!!")
+        assert name.startswith("unnamed-")
 
 
 class TestSuggestTags:

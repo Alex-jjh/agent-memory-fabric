@@ -49,6 +49,11 @@ class QueryExpander:
         elif role in ("assistant", "ai"):
             self._prior_assistant = message
 
+    def reset(self) -> None:
+        """Reset state for new conversation/session."""
+        self._prior_user = None
+        self._prior_assistant = None
+
     def _extract_context(self, text: str) -> str:
         """First N words + last N words of text."""
         words = text.split()

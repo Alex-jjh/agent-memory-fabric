@@ -71,7 +71,17 @@ class LLMReranker:
 
         id_to_sm = {sm.node.id: sm for sm in candidates}
         result = [id_to_sm[sid] for sid in selected_ids if sid in id_to_sm]
-        return result if result else self._fallback(candidates)
+        if not result:
+            return self._fallback(candidates)
+        # Pad with algorithmic top if LLM returned fewer than top_k
+        if len(result) < self.top_k:
+            selected_set = {sm.node.id for sm in result}
+            for sm in candidates:
+                if sm.node.id not in selected_set:
+                    result.append(sm)
+                    if len(result) >= self.top_k:
+                        break
+        return result
 
     def _build_manifest(self, candidates: list[ScoredMemory]) -> str:
         """One-line summary per candidate for the LLM."""

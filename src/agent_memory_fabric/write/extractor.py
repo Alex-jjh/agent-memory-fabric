@@ -28,11 +28,13 @@ NOISE_PATTERNS = re.compile(
 
 
 def generate_name(content: str) -> str:
-    """Generate a kebab-case name from the first 5 words of content."""
+    """Generate a kebab-case name from the first 5 words + short hash suffix."""
+    import hashlib
     words = content.split()[:5]
     parts = [re.sub(r"[^a-z0-9]", "", w.lower()) for w in words]
-    name = "-".join(p for p in parts if p)
-    return name[:50] or "unnamed"
+    base = "-".join(p for p in parts if p)[:42] or "unnamed"
+    suffix = hashlib.md5(content.encode()).hexdigest()[:7]
+    return f"{base}-{suffix}"
 
 
 def suggest_tags(content: str) -> list[str]:

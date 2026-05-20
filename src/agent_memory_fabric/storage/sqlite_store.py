@@ -160,13 +160,18 @@ class SQLiteStore:
         return [(row["node_id"], -row["score"]) for row in rows]
 
     def _prepare_fts_query(self, query: str) -> str:
+        import unicodedata
         terms = query.strip().split()
         if not terms:
             return ""
         safe_terms = []
         for t in terms:
-            cleaned = "".join(c for c in t if c.isalnum() or c in "-_")
-            if cleaned:
+            cleaned = "".join(
+                c for c in t
+                if c.isalnum() or c in "-_'" or unicodedata.category(c).startswith(("L", "N"))
+            )
+            cleaned = cleaned.strip("'-_")
+            if cleaned and len(cleaned) > 1:
                 safe_terms.append(f'"{cleaned}"')
         if not safe_terms:
             return ""

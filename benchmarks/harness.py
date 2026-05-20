@@ -184,6 +184,11 @@ class ExperimentHarness:
 
         print()
 
+        # Phase 1.5: Derive stale IDs for SIR measurement
+        # For knowledge_update questions, evidence points to the CURRENT fact.
+        # Nodes from EARLIER sessions with the same keywords are stale.
+        self._derive_stale_ids(questions, sessions)
+
         # Phase 2: Evaluate
         results = []
         total_q = len(questions)
@@ -196,6 +201,45 @@ class ExperimentHarness:
 
         # Phase 3: Aggregate
         return self._aggregate_metrics(results)
+
+    def _derive_stale_ids(self, questions: list[EvalQuestion], sessions: list[ConversationSession]) -> None:
+        """Derive stale node IDs from knowledge_update questions.
+
+        For category=knowledge_update, the evidence points to the CURRENT fact.
+        Earlier-session nodes covering the same topic are stale (superseded).
+        """
+        current_evidence_ids = set()
+        for q in questions:
+            if q.category == "knowledge_update":
+                for ref in q.evidence_turns:
+                    node_id = self._dia_id_to_node_id.get(ref)
+                    if node_id:
+                        current_evidence_ids.add(node_id)
+
+        if not current_evidence_ids:
+            return
+
+        current_nodes = [self.engine.read(nid) for nid in current_evidence_ids]
+        current_nodes = [n for n in current_nodes if n]
+
+        current_keywords: set[str] = set()
+        for node in current_nodes:
+            words = {w.lower() for w in node.content.split() if len(w) > 3}
+            current_keywords.update(words)
+
+        if not current_keywords:
+            return
+
+        for node_id in self._ingested_ids:
+            if node_id in current_evidence_ids:
+                continue
+            node = self.engine.read(node_id)
+            if not node:
+                continue
+            node_words = {w.lower() for w in node.content.split() if len(w) > 3}
+            overlap = node_words & current_keywords
+            if len(overlap) >= 3 and node.created < min(n.created for n in current_nodes):
+                self._stale_ids.add(node_id)
 
     def _backdate_memories(self, node_ids: list[str], days_ago: float) -> None:
         """Artificially age memories to simulate time passing between sessions."""

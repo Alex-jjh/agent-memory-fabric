@@ -22,8 +22,7 @@ class MemoryManifest:
     def __init__(self, max_lines: int = MAX_LINES, max_bytes: int = MAX_BYTES):
         self.max_lines = max_lines
         self.max_bytes = max_bytes
-        self._cache: str | None = None
-        self._cache_time: float = 0.0
+        self._cache: dict[str, tuple[float, str]] = {}
         self._cache_ttl: float = 60.0
 
     def generate(self, nodes: list[MemoryNode]) -> str:
@@ -42,17 +41,19 @@ class MemoryManifest:
         manifest = "\n".join(lines)
         return self._truncate_bytes(manifest)
 
-    def generate_cached(self, nodes: list[MemoryNode]) -> str:
-        """Generate with TTL-based caching."""
+    def generate_cached(self, nodes: list[MemoryNode], cache_key: str = "_global") -> str:
+        """Generate with TTL-based caching, keyed by scope."""
         now = time.time()
-        if self._cache is not None and (now - self._cache_time) < self._cache_ttl:
-            return self._cache
-        self._cache = self.generate(nodes)
-        self._cache_time = now
-        return self._cache
+        if cache_key in self._cache:
+            cached_time, cached_result = self._cache[cache_key]
+            if (now - cached_time) < self._cache_ttl:
+                return cached_result
+        result = self.generate(nodes)
+        self._cache[cache_key] = (now, result)
+        return result
 
     def invalidate_cache(self) -> None:
-        self._cache = None
+        self._cache.clear()
 
     def _format_entry(self, node: MemoryNode) -> str:
         """Format: '- [type] name (ISO date): first_sentence'"""

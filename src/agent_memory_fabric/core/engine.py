@@ -252,6 +252,7 @@ class MemoryEngine:
         new_content: str,
         provider: LLMProvider,
         scope: str | None = None,
+        embedding_provider: "EmbeddingProvider | None" = None,
     ) -> list[tuple[str, str]]:
         """Detect memories contradicted by new content and archive them.
 
@@ -260,7 +261,11 @@ class MemoryEngine:
         all_nodes = self.markdown_store.list_all(scope=scope)
         active_nodes = [n for n in all_nodes if n.state == LifecycleState.ACTIVE]
 
-        contradictions = detect_contradictions(new_content, active_nodes, provider)
+        contradictions = detect_contradictions(
+            new_content, active_nodes, provider,
+            embedding_provider=embedding_provider,
+            sqlite_store=self.sqlite_store,
+        )
         archived: list[tuple[str, str]] = []
 
         for node, reason in contradictions:

@@ -72,7 +72,6 @@ class TestMemoryManifest:
 
     def test_invalidate_cache(self):
         m = MemoryManifest()
-        m._cache = "old"
-        m._cache_time = 0
+        m._cache["test"] = (0, "old")
         m.invalidate_cache()
-        assert m._cache is None
+        assert m._cache == {}

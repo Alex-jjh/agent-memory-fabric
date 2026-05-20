@@ -22,7 +22,7 @@ class TestWriteAndRead:
 
     def test_write_auto_generates_name(self, engine):
         node = engine.write("This is a test memory for things")
-        assert node.name == "this-is-a-test-memory"
+        assert node.name.startswith("this-is-a-test-memory-")
 
     def test_read_by_id(self, engine):
         node = engine.write("Hello world", name="hello")

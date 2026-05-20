@@ -151,7 +151,8 @@ class AMFOrchestrator:
         return contradicted
 
     def on_session_end(self) -> list[str]:
-        """Force extraction of any remaining buffered turns."""
+        """Force extraction of any remaining buffered turns and reset session state."""
+        self.query_expander.reset()
         if self.async_pipeline:
             return self.async_pipeline.flush()
         return self.write_pipeline.force_extract()
@@ -172,7 +173,7 @@ class AMFOrchestrator:
         The LLM uses this to know what memories exist without reading full content.
         """
         candidates = self._get_candidates(scope)
-        return self._manifest.generate_cached(candidates)
+        return self._manifest.generate_cached(candidates, cache_key=scope or "_global")
 
     def get_interpretation_rules(self) -> str:
         """Get the interpretation rules section for system prompt."""
