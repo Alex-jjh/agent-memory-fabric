@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -57,6 +58,7 @@ class SQLiteStore:
         self._conn: Optional[sqlite3.Connection] = None
         self._vec_available: Optional[bool] = None
         self._vec_initialized: bool = False
+        self._write_lock = threading.Lock()
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -80,6 +82,10 @@ class SQLiteStore:
             self._conn = None
 
     def upsert_node(self, node: MemoryNode, content: str | None = None) -> None:
+        with self._write_lock:
+            self._upsert_node_inner(node, content)
+
+    def _upsert_node_inner(self, node: MemoryNode, content: str | None = None) -> None:
         conn = self._get_conn()
         conn.execute(
             """INSERT OR REPLACE INTO nodes
@@ -115,6 +121,10 @@ class SQLiteStore:
         conn.commit()
 
     def delete_node(self, node_id: str) -> None:
+        with self._write_lock:
+            self._delete_node_inner(node_id)
+
+    def _delete_node_inner(self, node_id: str) -> None:
         conn = self._get_conn()
         conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
         conn.execute("DELETE FROM fts_index WHERE node_id = ?", (node_id,))
@@ -179,6 +189,12 @@ class SQLiteStore:
 
     def add_edge(
         self, source_id: str, target_id: str, edge_type: str = "links_to", weight: float = 1.0
+    ) -> None:
+        with self._write_lock:
+            self._add_edge_inner(source_id, target_id, edge_type, weight)
+
+    def _add_edge_inner(
+        self, source_id: str, target_id: str, edge_type: str, weight: float
     ) -> None:
         conn = self._get_conn()
         conn.execute(

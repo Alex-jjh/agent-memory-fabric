@@ -113,13 +113,9 @@ class MemoryEngine:
             if secret_matches:
                 raise SecretDetectedError(secret_matches)
 
-        # Fast-path dedup via WriteRouter
-        op = self.write_router.classify(content, existing_hashes=self._content_hashes)
-        if op is None:
+        # Fast-path dedup check
+        if self.write_router.classify(content, existing_hashes=self._content_hashes) is None:
             return None
-
-        if operation:
-            op = WriteOperation(operation) if isinstance(operation, str) else operation
 
         if name is None:
             name = generate_name(content)
@@ -359,6 +355,7 @@ class MemoryEngine:
             self.sqlite_store.delete_node(node.id)
             return None
 
+        node.modified = datetime.now(timezone.utc)
         self.markdown_store.write(node)
         self.sqlite_store.upsert_node(node, content=node.content)
         return node

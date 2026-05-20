@@ -177,11 +177,12 @@ class WritePipeline:
     def _generate_manifest(self) -> str:
         """Generate manifest of existing memories for extraction context."""
         from agent_memory_fabric.read.manifest import MemoryManifest
+        if not hasattr(self, '_shared_manifest'):
+            self._shared_manifest = MemoryManifest(max_lines=50)
         nodes = [n for n in self.engine.markdown_store.list_all() if n.is_retrievable()]
         if not nodes:
             return ""
-        manifest = MemoryManifest(max_lines=50)
-        return manifest.generate(nodes)
+        return self._shared_manifest.generate_cached(nodes, cache_key="_extraction")
 
     @property
     def pending_turns(self) -> int:
