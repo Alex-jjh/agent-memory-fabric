@@ -89,10 +89,14 @@ class MemoryEngine:
         ttl: datetime | None = None,
         strength: float = 1.0,
         skip_secret_scan: bool = False,
+        target_node_id: str | None = None,
     ) -> Optional[MemoryNode]:
-        """Create and persist a new memory node. Returns None if content is a duplicate."""
+        """Write a memory node. Supports ADD (default), REPLACE, EXPIRE, SYNTHESIZE.
+
+        For REPLACE/EXPIRE: pass target_node_id to identify the node to modify.
+        """
         with self._lock:
-            return self._write_inner(content, operation, project, name, tags, node_type, state, ttl, strength, skip_secret_scan)
+            return self._write_inner(content, operation, project, name, tags, node_type, state, ttl, strength, skip_secret_scan, target_node_id)
 
     def _write_inner(
         self,
@@ -106,6 +110,7 @@ class MemoryEngine:
         ttl: datetime | None,
         strength: float,
         skip_secret_scan: bool = False,
+        target_node_id: str | None = None,
     ) -> Optional[MemoryNode]:
         # Secret scan gate
         if not skip_secret_scan:
@@ -113,6 +118,47 @@ class MemoryEngine:
             if secret_matches:
                 raise SecretDetectedError(secret_matches)
 
+        # Resolve operation
+        op = WriteOperation(operation) if isinstance(operation, str) and operation else None
+
+        # REPLACE: update existing node's content
+        if op == WriteOperation.REPLACE and target_node_id:
+            target = self.markdown_store.read(target_node_id)
+            if target:
+                old_hash = compute_hash(target.content)
+                result = self.write_router.execute(content, WriteOperation.REPLACE, target)
+                if result:
+                    self.markdown_store.write(result)
+                    self.sqlite_store.upsert_node(result, content=content)
+                    self._content_hashes.discard(old_hash)
+                    self._content_hashes.add(compute_hash(content))
+                    return result
+            return None
+
+        # EXPIRE: transition existing node to expired
+        if op == WriteOperation.EXPIRE and target_node_id:
+            target = self.markdown_store.read(target_node_id)
+            if target:
+                result = self.write_router.execute(content, WriteOperation.EXPIRE, target)
+                if result:
+                    self.markdown_store.write(result)
+                    self.sqlite_store.upsert_node(result, content=result.content)
+                    return result
+            return None
+
+        # SYNTHESIZE: create a decided-state synthesis node
+        if op == WriteOperation.SYNTHESIZE:
+            result = self.write_router.execute(content, WriteOperation.SYNTHESIZE)
+            if result:
+                if tags:
+                    result.tags = tags
+                self.markdown_store.write(result)
+                self.sqlite_store.upsert_node(result, content=content)
+                self._content_hashes.add(compute_hash(content))
+                return result
+            return None
+
+        # Default: APPEND (create new node)
         # Fast-path dedup check
         if self.write_router.classify(content, existing_hashes=self._content_hashes) is None:
             return None

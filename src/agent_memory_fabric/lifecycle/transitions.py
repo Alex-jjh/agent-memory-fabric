@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode
-from agent_memory_fabric.lifecycle.decay import compute_decay
+from agent_memory_fabric.lifecycle.decay import composite_score, compute_decay
 from agent_memory_fabric.lifecycle.protection import is_protected
 
 
@@ -129,7 +129,13 @@ class PromotionPredicate:
         if age_days < self.min_age_days:
             return None
 
-        score = compute_decay(node.last_accessed, strength=node.strength)
+        now = datetime.now(timezone.utc)
+        hours_since = (now - node.last_accessed).total_seconds() / 3600.0
+        score = composite_score(
+            use_count=node.access_count,
+            hours_since=hours_since,
+            strength=node.strength,
+        )
         if score >= self.score_threshold and node.access_count >= 2:
             return LifecycleState.DECIDED
 

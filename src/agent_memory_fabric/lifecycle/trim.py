@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode
 from agent_memory_fabric.lifecycle.confidence import BetaConfidence
+from agent_memory_fabric.lifecycle.decay import composite_score, heat_score
 from agent_memory_fabric.lifecycle.protection import is_protected
 
 MEMORY_LIMIT = 10000
@@ -48,7 +49,16 @@ def compute_trim_score(node: MemoryNode, now: datetime | None = None) -> float:
     total_outcomes = success_count + failure_count
     utility = success_count / total_outcomes if total_outcomes > 0 else 0.0
 
-    return 0.4 * effective_conf + 0.3 * recency + 0.3 * utility
+    # Incorporate heat_score for frequency/engagement signal
+    hours_since = age_secs / 3600.0
+    heat = heat_score(
+        visits=node.access_count,
+        interaction_len=len(node.content.split()) / 20.0,
+        hours_since=hours_since,
+    )
+    heat_normalized = min(1.0, heat / 10.0)
+
+    return 0.3 * effective_conf + 0.25 * recency + 0.25 * utility + 0.2 * heat_normalized
 
 
 class AutoTrimmer:
