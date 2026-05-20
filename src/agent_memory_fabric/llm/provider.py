@@ -57,9 +57,9 @@ class BedrockProvider:
 
     def __init__(
         self,
-        model_id: str = "anthropic.claude-sonnet-4-20250514",
+        model_id: str = "anthropic.claude-3-haiku-20240307-v1:0",
         region: str = "us-east-1",
-        max_tokens: int = 1024,
+        max_tokens: int = 256,
     ):
         self.model_id = model_id
         self.region = region
