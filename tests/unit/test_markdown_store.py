@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode, MemoryType
-from agent_memory_fabric.storage.markdown import MarkdownStore, extract_wikilinks
+from agent_memory_fabric.storage.graph import extract_wikilinks
+from agent_memory_fabric.storage.markdown import MarkdownStore
 
 
 @pytest.fixture

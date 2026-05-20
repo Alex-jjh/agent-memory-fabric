@@ -115,11 +115,15 @@ class MultiSignalScorer:
                 "frequency": frequency,
             }
 
+            # Phase 2: only 3 signals active. Normalize weights to sum to 1.0.
+            # weights.semantic used for BM25 until Phase 3 adds embedding signal.
+            active_weight_sum = self.weights.semantic + self.weights.recency + self.weights.frequency
             total = (
-                self.weights.semantic * bm25_norm
-                + self.weights.recency * recency
-                + self.weights.frequency * frequency
-            )
+                (self.weights.semantic * bm25_norm
+                 + self.weights.recency * recency
+                 + self.weights.frequency * frequency)
+                / active_weight_sum
+            ) if active_weight_sum > 0 else 0.0
 
             scored.append(ScoredMemory(
                 node=node,
@@ -134,6 +138,11 @@ class MultiSignalScorer:
     def _assign_tiers(self, scored: list[ScoredMemory]) -> None:
         """Assign hot/warm/cold tiers based on score rank position."""
         n = len(scored)
+        if n == 0:
+            return
+        if n == 1:
+            scored[0].tier = "hot"
+            return
         for i, s in enumerate(scored):
             if i < n * 0.3:
                 s.tier = "hot"

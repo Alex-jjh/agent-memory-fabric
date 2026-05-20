@@ -50,17 +50,9 @@ class WriteRouter:
         if existing_hashes and dedup_check(content, existing_hashes):
             return None
 
-        if existing_node and self._is_contradiction(content, existing_node):
-            return WriteOperation.REPLACE
-
+        # LLM-based contradiction detection deferred to Phase 3.
+        # For now, all non-duplicate content is classified as Append.
         return WriteOperation.APPEND
-
-    def _is_contradiction(self, new_content: str, existing: MemoryNode) -> bool:
-        """Basic contradiction detection: same name/topic, different content.
-
-        Full LLM-based detection deferred to Phase 3.
-        """
-        return compute_hash(new_content) != compute_hash(existing.content)
 
     def has_ttl_pattern(self, content: str) -> bool:
         """Check if content contains temporal expiration patterns."""

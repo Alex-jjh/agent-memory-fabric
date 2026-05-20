@@ -20,11 +20,12 @@ def ebbinghaus_decay(hours_since_access: float, strength: float = 1.0) -> float:
 
 
 def power_law_decay(hours_since_access: float, strength: float = 1.0, exponent: float = 0.6) -> float:
-    """Power-law decay: score = strength / (1 + t)^exponent.
+    """Power-law decay: score = strength / (1 + t)^exponent, clamped to [0, 1].
 
     Inspired by CortexGraph: (use_count+1)^0.6 * decay(dt) * strength.
     """
-    return strength / ((1.0 + hours_since_access) ** exponent)
+    raw = strength / ((1.0 + max(0.0, hours_since_access)) ** exponent)
+    return min(1.0, raw)
 
 
 def exponential_decay(hours_since_access: float, half_life_hours: float = 336.0) -> float:
@@ -40,7 +41,7 @@ def compute_decay(
 ) -> float:
     """Compute current decay score for a memory node."""
     now = datetime.now(timezone.utc)
-    hours = (now - last_accessed).total_seconds() / 3600.0
+    hours = max(0.0, (now - last_accessed).total_seconds() / 3600.0)
 
     if model == DecayModel.EBBINGHAUS:
         return ebbinghaus_decay(hours, strength)

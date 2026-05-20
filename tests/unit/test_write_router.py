@@ -44,10 +44,10 @@ class TestClassify:
         result = self.router.classify("brand new content")
         assert result == WriteOperation.APPEND
 
-    def test_contradiction_returns_replace(self):
+    def test_new_content_with_existing_returns_append(self):
         existing = MemoryNode(name="test", content="old content")
         result = self.router.classify("new content", existing_node=existing)
-        assert result == WriteOperation.REPLACE
+        assert result == WriteOperation.APPEND
 
     def test_same_content_with_existing_returns_append(self):
         existing = MemoryNode(name="test", content="same content")

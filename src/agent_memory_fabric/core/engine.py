@@ -14,9 +14,12 @@ from agent_memory_fabric.lifecycle.transitions import (
     TemporalDecayPredicate,
     TTLExpirationPredicate,
 )
-from agent_memory_fabric.storage.graph import build_edges_from_wikilinks, extract_wikilinks
+from agent_memory_fabric.read.scorer import MultiSignalScorer
+from agent_memory_fabric.storage.graph import build_edges_from_wikilinks
 from agent_memory_fabric.storage.markdown import MarkdownStore
 from agent_memory_fabric.storage.sqlite_store import SQLiteStore
+from agent_memory_fabric.write.extractor import generate_name
+from agent_memory_fabric.write.router import WriteRouter, compute_hash
 
 
 class MemoryEngine:
@@ -30,6 +33,8 @@ class MemoryEngine:
         self.markdown_store = MarkdownStore(self.config.vault_path)
         self.sqlite_store = SQLiteStore(self.config.get_db_path())
         self.state_machine = StateMachine(self.config.decay)
+        self.write_router = WriteRouter()
+        self.scorer = MultiSignalScorer(self.config.scorer_weights)
         self._predicates = [
             TTLExpirationPredicate(),
             TemporalDecayPredicate(
@@ -38,6 +43,7 @@ class MemoryEngine:
             ),
             InactivityArchivePredicate(inactive_days=30),
         ]
+        self._content_hashes: set[str] = set()
 
         self._initialize()
 
@@ -50,6 +56,7 @@ class MemoryEngine:
         fs_nodes = self.markdown_store.list_all()
         self.sqlite_store.reconcile(fs_nodes)
         self._rebuild_edges(fs_nodes)
+        self._content_hashes = {compute_hash(n.content) for n in fs_nodes}
 
     def _rebuild_edges(self, nodes: list[MemoryNode]) -> None:
         name_to_id = {n.name: n.id for n in nodes}
@@ -69,11 +76,18 @@ class MemoryEngine:
         state: LifecycleState = LifecycleState.ACTIVE,
         ttl: datetime | None = None,
         strength: float = 1.0,
-    ) -> MemoryNode:
-        """Create and persist a new memory node."""
+    ) -> Optional[MemoryNode]:
+        """Create and persist a new memory node. Returns None if content is a duplicate."""
+        # Fast-path dedup via WriteRouter
+        op = self.write_router.classify(content, existing_hashes=self._content_hashes)
+        if op is None:
+            return None
+
+        if operation:
+            op = WriteOperation(operation) if isinstance(operation, str) else operation
+
         if name is None:
-            words = content.split()[:5]
-            name = "-".join(w.lower().strip(".,!?;:") for w in words if w)[:50] or "unnamed"
+            name = generate_name(content)
 
         if isinstance(node_type, str):
             node_type = MemoryType(node_type)
@@ -93,8 +107,9 @@ class MemoryEngine:
             strength=strength,
         )
 
-        file_path = self.markdown_store.write(node)
+        self.markdown_store.write(node)
         self.sqlite_store.upsert_node(node, content=content)
+        self._content_hashes.add(compute_hash(content))
 
         all_nodes = self.sqlite_store.get_all_nodes()
         name_to_id = {r["name"]: r["id"] for r in all_nodes}
@@ -160,6 +175,19 @@ class MemoryEngine:
 
         return transitions_fired
 
+    def run_consolidation(self) -> int:
+        """Merge duplicates and synthesize insights. Returns count of nodes affected."""
+        raise NotImplementedError("Phase 3: consolidation engine")
+
+    def retrieve_proactive(
+        self,
+        message: str,
+        scope: str | None = None,
+        top_k: int | None = None,
+    ) -> list[MemoryNode]:
+        """Proactive retrieval: select relevant memories for an incoming message."""
+        raise NotImplementedError("Phase 3: proactive gateway")
+
     def search(
         self,
         query: str,
@@ -167,21 +195,35 @@ class MemoryEngine:
         scope: str | None = None,
         include_archived: bool = False,
     ) -> list[MemoryNode]:
-        """Search memories by keyword (FTS5). Returns nodes ranked by BM25."""
-        results = self.sqlite_store.search_fts(query, limit=top_k * 3)
+        """Search memories using multi-signal scoring (BM25 + recency + frequency)."""
+        fts_results = self.sqlite_store.search_fts(query, limit=top_k * 5)
 
-        nodes: list[MemoryNode] = []
-        for node_id, score in results:
+        fts_node_ids = {node_id for node_id, _ in fts_results}
+        fts_scores = {node_id: score for node_id, score in fts_results}
+
+        candidates: list[MemoryNode] = []
+        for node_id in fts_node_ids:
             node = self.markdown_store.read(node_id)
             if node is None:
                 continue
-            if not node.is_retrievable(include_archived=include_archived):
-                continue
             if scope and node.project != scope:
                 continue
-            node.touch()
-            nodes.append(node)
-            if len(nodes) >= top_k:
-                break
+            candidates.append(node)
 
-        return nodes
+        state_filter = {LifecycleState.ACTIVE, LifecycleState.DECIDED}
+        if include_archived:
+            state_filter.add(LifecycleState.ARCHIVED)
+
+        scored = self.scorer.score(
+            candidates=candidates,
+            fts_scores=fts_scores,
+            state_filter=state_filter,
+        )
+
+        results: list[MemoryNode] = []
+        for sm in scored[:top_k]:
+            sm.node.touch()
+            self.sqlite_store.upsert_node(sm.node, content=sm.node.content)
+            results.append(sm.node)
+
+        return results

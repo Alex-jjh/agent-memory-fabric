@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -12,12 +11,6 @@ from typing import Optional
 import yaml
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode, MemoryType
-
-WIKILINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
-
-
-def extract_wikilinks(content: str) -> list[str]:
-    return WIKILINK_PATTERN.findall(content)
 
 
 class MarkdownStore:
@@ -103,12 +96,15 @@ class MarkdownStore:
         content = self._serialize(node)
 
         fd, tmp_path = tempfile.mkstemp(dir=file_path.parent, suffix=".tmp")
+        closed = False
         try:
             os.write(fd, content.encode("utf-8"))
             os.close(fd)
+            closed = True
             os.replace(tmp_path, file_path)
         except Exception:
-            os.close(fd) if not os.get_inheritable(fd) else None
+            if not closed:
+                os.close(fd)
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             raise
