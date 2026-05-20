@@ -210,14 +210,19 @@ class MemoryEngine:
 
     def run_transitions(self) -> list[tuple[str, LifecycleState, LifecycleState]]:
         """Evaluate all transition predicates on active nodes. Returns transitions fired."""
+        from agent_memory_fabric.lifecycle.confidence import MutationLedger
+        from agent_memory_fabric.lifecycle.transitions import TemporalDecayPredicate
+
         transitions_fired: list[tuple[str, LifecycleState, LifecycleState]] = []
+        ledger = MutationLedger()
         active_nodes = self.sqlite_store.get_all_nodes(state="active")
         decided_nodes = self.sqlite_store.get_all_nodes(state="decided")
 
-        from agent_memory_fabric.lifecycle.transitions import TemporalDecayPredicate
-
         for row in active_nodes + decided_nodes:
-            node = self.markdown_store.read(row["id"])
+            node_id = row["id"]
+            if not ledger.can_mutate(node_id):
+                continue
+            node = self.markdown_store.read(node_id)
             if node is None:
                 continue
 
@@ -235,6 +240,7 @@ class MemoryEngine:
                     self.markdown_store.write(node)
                     self.sqlite_store.upsert_node(node, content=node.content)
                     transitions_fired.append((node.id, old_state, target))
+                    ledger.record(node_id)
                     break
 
         return transitions_fired

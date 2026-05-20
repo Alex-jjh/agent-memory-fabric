@@ -28,7 +28,9 @@ DEFAULT_PIPELINES = [
 
 
 def _estimate_tokens(text: str) -> int:
-    return len(text) // 4
+    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    non_ascii = len(text) - ascii_chars
+    return (ascii_chars // 4) + non_ascii
 
 
 class PipelineRetriever:

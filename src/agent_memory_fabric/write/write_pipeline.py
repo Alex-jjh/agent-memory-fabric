@@ -180,18 +180,31 @@ class WritePipeline:
         if not hasattr(self, '_shared_manifest'):
             self._shared_manifest = MemoryManifest(max_lines=50)
 
-        # Use SQLite metadata (no file I/O) for manifest generation
+        # Use SQLite index + FTS content (single SQL, no file I/O)
         active = self.engine.sqlite_store.get_all_nodes(state="active")
         decided = self.engine.sqlite_store.get_all_nodes(state="decided")
         if not active and not decided:
             return ""
 
-        from agent_memory_fabric.core.node import MemoryNode, LifecycleState, MemoryType
+        from agent_memory_fabric.core.node import MemoryNode, MemoryType
         from datetime import datetime
+
+        # Fetch content snippets from FTS index in one query
+        conn = self.engine.sqlite_store._get_conn()
+        content_map: dict[str, str] = {}
+        try:
+            rows = conn.execute("SELECT node_id, content FROM fts_index").fetchall()
+            for r in rows:
+                content_map[r["node_id"]] = r["content"] or ""
+        except Exception:
+            pass
+
         nodes = []
         for row in active + decided:
+            nid = row["id"]
+            content = content_map.get(nid, row["name"])
             nodes.append(MemoryNode(
-                id=row["id"], name=row["name"], content=row["name"],
+                id=nid, name=row["name"], content=content,
                 type=MemoryType(row.get("type", "project")),
                 modified=datetime.fromisoformat(row["modified"]),
             ))

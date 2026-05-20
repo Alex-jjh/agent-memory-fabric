@@ -11,6 +11,7 @@ class DecayModel(str, Enum):
     EBBINGHAUS = "ebbinghaus"
     POWER_LAW = "power_law"
     EXPONENTIAL = "exponential"
+    GAUSSIAN = "gaussian"
 
 
 def ebbinghaus_decay(hours_since_access: float, strength: float = 1.0, half_life_hours: float = 336.0) -> float:
@@ -56,6 +57,8 @@ def compute_decay(
         return power_law_decay(hours, strength)
     elif model == DecayModel.EXPONENTIAL:
         return exponential_decay(hours, half_life_hours)
+    elif model == DecayModel.GAUSSIAN:
+        return gaussian_recency(hours, scale_hours=half_life_hours)
     else:
         raise ValueError(f"Unknown decay model: {model}")
 
