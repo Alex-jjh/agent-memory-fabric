@@ -47,6 +47,8 @@ class MemoryNode(BaseModel):
     access_count: int = 0
     decay_score: float = 1.0
     strength: float = 1.0
+    confidence_alpha: float = 1.0
+    confidence_beta: float = 1.0
     ttl: Optional[datetime] = None
     tags: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)

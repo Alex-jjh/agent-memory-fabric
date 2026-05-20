@@ -152,10 +152,11 @@ class TestWikilinks:
         engine.write("First memory", name="first")
         engine.write("Second links to [[first]]", name="second")
 
-        neighbors = engine.sqlite_store.get_neighbors(
-            engine.sqlite_store.get_all_nodes()[1]["id"]
-        )
-        assert len(neighbors) >= 0  # edges are built on _reconcile/write
+        all_nodes = engine.sqlite_store.get_all_nodes()
+        second_node = next(n for n in all_nodes if n["name"] == "second")
+        neighbors = engine.sqlite_store.get_neighbors(second_node["id"])
+        first_node = next(n for n in all_nodes if n["name"] == "first")
+        assert first_node["id"] in neighbors
 
 
 class TestReconcile:

@@ -47,11 +47,13 @@ class AbstainGate:
         if len(words) < self.min_words:
             return True
 
-        if GREETING_PATTERNS.match(stripped):
-            return True
-
-        if CONFIRMATION_PATTERNS.match(stripped):
-            return True
+        # Only match greetings/confirmations for SHORT messages (<=5 words).
+        # "Hello can you explain the lifecycle?" should NOT abstain.
+        if len(words) <= 5:
+            if GREETING_PATTERNS.match(stripped):
+                return True
+            if CONFIRMATION_PATTERNS.match(stripped):
+                return True
 
         return False
 

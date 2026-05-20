@@ -50,6 +50,8 @@ class MarkdownStore:
             "access_count": node.access_count,
             "decay_score": node.decay_score,
             "strength": node.strength,
+            "confidence_alpha": node.confidence_alpha,
+            "confidence_beta": node.confidence_beta,
             "tags": node.tags,
             "links": node.links,
         }
@@ -83,6 +85,8 @@ class MarkdownStore:
             access_count=data.get("access_count", 0),
             decay_score=data.get("decay_score", 1.0),
             strength=data.get("strength", 1.0),
+            confidence_alpha=data.get("confidence_alpha", 1.0),
+            confidence_beta=data.get("confidence_beta", 1.0),
             ttl=datetime.fromisoformat(data["ttl"]) if data.get("ttl") else None,
             tags=data.get("tags", []),
             links=data.get("links", []),

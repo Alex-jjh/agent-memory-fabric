@@ -209,6 +209,7 @@ class MemoryEngine:
     ) -> Optional[MemoryNode]:
         """Record a confidence outcome for a memory node.
 
+        Updates alpha/beta on the node (persisted in frontmatter).
         If confidence drops below threshold, may trigger accelerated state transition.
         Returns updated node, or None if not found.
         """
@@ -216,16 +217,18 @@ class MemoryEngine:
         if node is None:
             return None
 
-        if not hasattr(node, "_confidence"):
-            node._confidence = BetaConfidence()
+        # Update confidence directly on the persisted fields
+        if success:
+            node.confidence_alpha += weight
+        else:
+            node.confidence_beta += weight
 
-        node._confidence.record_outcome(success, weight)
+        confidence_val = node.confidence_alpha / (node.confidence_alpha + node.confidence_beta)
 
         # Check if low confidence should accelerate decay
-        if node._confidence.should_accelerate_decay():
+        if confidence_val < 0.3:
             for predicate in self._predicates:
-                confidence_val = node._confidence.effective_confidence()
-                if hasattr(predicate, "evaluate") and "confidence" in predicate.evaluate.__code__.co_varnames:
+                if isinstance(predicate, TemporalDecayPredicate):
                     target = predicate.evaluate(node, confidence=confidence_val)
                 else:
                     target = predicate.evaluate(node)

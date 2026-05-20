@@ -241,7 +241,8 @@ class SQLiteStore:
 
         Falls back to empty results if sqlite-vec is not available.
         """
-        if not getattr(self, "_vec_available", None):
+        self._ensure_vec_table(len(embedding))
+        if not self._vec_available:
             return []
         conn = self._get_conn()
         import struct
@@ -254,7 +255,8 @@ class SQLiteStore:
 
     def upsert_embedding(self, node_id: str, embedding: list[float]) -> None:
         """Store or update embedding for a node. No-op if sqlite-vec unavailable."""
-        if not getattr(self, "_vec_available", None):
+        self._ensure_vec_table(len(embedding))
+        if not self._vec_available:
             return
         conn = self._get_conn()
         import struct

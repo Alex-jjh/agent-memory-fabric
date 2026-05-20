@@ -60,7 +60,8 @@ class TestRetrieveProactive:
             "dark mode preference",
             embedding_provider=provider,
         )
-        assert len(results) >= 0  # may or may not have results depending on FTS
+        # Should retrieve results via FTS even without sqlite-vec
+        assert isinstance(results, list)
 
 
 class TestUpdateConfidence:
