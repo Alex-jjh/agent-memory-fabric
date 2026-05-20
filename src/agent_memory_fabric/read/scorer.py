@@ -176,9 +176,17 @@ class MultiSignalScorer:
         confidence_alpha: float = 0.2,
     ) -> list[ScoredMemory]:
         """Apply multiplicative boosts to base scores for sharper differentiation."""
+        from agent_memory_fabric.lifecycle.confidence import BetaConfidence
+
         for s in scored:
             recency = s.signal_breakdown.get("recency", 0.5)
-            confidence = s.node.confidence_alpha / (s.node.confidence_alpha + s.node.confidence_beta)
+            conf = BetaConfidence(
+                alpha=s.node.confidence_alpha,
+                beta_param=s.node.confidence_beta,
+                recent_outcomes=list(s.node.recent_outcomes),
+                is_anti_pattern=s.node.is_anti_pattern,
+            )
+            confidence = conf.effective_confidence()
             recency_boost = 1.0 + recency_alpha * (recency - 0.5)
             confidence_boost = 1.0 + confidence_alpha * (confidence - 0.5)
             s.total_score *= recency_boost * confidence_boost

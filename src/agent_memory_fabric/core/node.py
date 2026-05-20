@@ -53,6 +53,8 @@ class MemoryNode(BaseModel):
     tags: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
     applicable_domains: list[str] = Field(default_factory=list)
+    recent_outcomes: list[dict] = Field(default_factory=list)
+    is_anti_pattern: bool = False
 
     def is_retrievable(self, include_archived: bool = False) -> bool:
         if self.state == LifecycleState.EXPIRED:

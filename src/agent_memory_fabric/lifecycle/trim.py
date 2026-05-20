@@ -30,7 +30,12 @@ def compute_trim_score(node: MemoryNode, now: datetime | None = None) -> float:
     if now is None:
         now = datetime.now(timezone.utc)
 
-    conf = BetaConfidence(alpha=node.confidence_alpha, beta_param=node.confidence_beta)
+    conf = BetaConfidence(
+        alpha=node.confidence_alpha,
+        beta_param=node.confidence_beta,
+        recent_outcomes=list(node.recent_outcomes),
+        is_anti_pattern=node.is_anti_pattern,
+    )
     effective_conf = conf.effective_confidence()
 
     last_access = node.last_accessed or node.created

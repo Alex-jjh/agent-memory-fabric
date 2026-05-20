@@ -162,8 +162,12 @@ class AMFOrchestrator:
         return self.engine.write(content=content, tags=final_tags, project=project)
 
     def _get_candidates(self, scope: str | None = None) -> list[MemoryNode]:
-        """Load retrievable candidates from storage."""
-        return [
-            n for n in self.engine.markdown_store.list_all(scope=scope)
-            if n.is_retrievable()
-        ]
+        """Load retrievable candidates: always includes global, plus scoped if specified."""
+        global_nodes = self.engine.markdown_store.list_all(scope=None)
+        if scope:
+            scoped_nodes = self.engine.markdown_store.list_all(scope=scope)
+            seen_ids = {n.id for n in global_nodes}
+            all_nodes = global_nodes + [n for n in scoped_nodes if n.id not in seen_ids]
+        else:
+            all_nodes = global_nodes
+        return [n for n in all_nodes if n.is_retrievable()]

@@ -64,6 +64,8 @@ class PipelineRetriever:
         already_selected: set[str],
     ) -> list[ScoredMemory]:
         """Filter memories matching this pipeline's criteria."""
+        from agent_memory_fabric.lifecycle.confidence import BetaConfidence
+
         result = []
         for sm in memories:
             if sm.node.id in already_selected:
@@ -72,7 +74,12 @@ class PipelineRetriever:
                 continue
             if sm.total_score < pipeline.relevance_threshold:
                 continue
-            conf = sm.node.confidence_alpha / (sm.node.confidence_alpha + sm.node.confidence_beta)
+            conf = BetaConfidence(
+                alpha=sm.node.confidence_alpha,
+                beta_param=sm.node.confidence_beta,
+                recent_outcomes=list(sm.node.recent_outcomes),
+                is_anti_pattern=sm.node.is_anti_pattern,
+            ).effective_confidence()
             if conf < pipeline.confidence_floor:
                 continue
             result.append(sm)

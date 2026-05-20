@@ -292,25 +292,28 @@ class MemoryEngine:
         if node is None:
             return None
 
-        # Update confidence directly on the persisted fields
-        if success:
-            node.confidence_alpha += weight
-        else:
-            node.confidence_beta += weight
+        conf = BetaConfidence(
+            alpha=node.confidence_alpha,
+            beta_param=node.confidence_beta,
+            recent_outcomes=list(node.recent_outcomes),
+            is_anti_pattern=node.is_anti_pattern,
+        )
+        conf.record_outcome(success=success, weight=weight)
 
-        confidence_val = node.confidence_alpha / (node.confidence_alpha + node.confidence_beta)
+        node.confidence_alpha = conf.alpha
+        node.confidence_beta = conf.beta_param
+        node.recent_outcomes = conf.recent_outcomes
 
-        # Check if low confidence should accelerate decay
-        if confidence_val < 0.3:
-            for predicate in self._predicates:
-                if isinstance(predicate, TemporalDecayPredicate):
-                    target = predicate.evaluate(node, confidence=confidence_val)
-                else:
-                    target = predicate.evaluate(node)
-                if target and self.state_machine.can_transition(node, target):
-                    self.state_machine.transition(node, target)
-                    node.modified = datetime.now(timezone.utc)
-                    break
+        effective = conf.effective_confidence()
+
+        if effective < 0.3:
+            target = TemporalDecayPredicate(
+                decay_threshold=self.config.decay.forget_threshold,
+                min_inactive_days=7,
+            ).evaluate(node, confidence=effective)
+            if target and self.state_machine.can_transition(node, target):
+                self.state_machine.transition(node, target)
+                node.modified = datetime.now(timezone.utc)
 
         self.markdown_store.write(node)
         self.sqlite_store.upsert_node(node, content=node.content)
