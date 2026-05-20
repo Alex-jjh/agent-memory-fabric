@@ -353,6 +353,7 @@ class MemoryEngine:
         # Procedure auto-delete: 3+ failures with 0 successes
         from agent_memory_fabric.lifecycle.procedure_gc import should_auto_delete
         if should_auto_delete(node):
+            self._content_hashes.discard(compute_hash(node.content))
             self.markdown_store.delete(node.id)
             self.sqlite_store.delete_node(node.id)
             return None

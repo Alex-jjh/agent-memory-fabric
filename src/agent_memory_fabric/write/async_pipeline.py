@@ -63,11 +63,17 @@ class AsyncWritePipeline:
         self._thread.start()
 
     def _run_background(self) -> None:
-        """Background thread target: run extraction then check for trailing work."""
+        """Background thread target: run extraction then check for trailing work.
+
+        While in_progress=True, schedule_turn appends to _pending_after (not _turn_buffer),
+        so _turn_buffer is safe to read here without the lock during extraction.
+        """
         try:
             created_ids = self._pipeline._run_extraction()
             self._pipeline.trigger.mark_extracted()
-            self._pipeline._turn_buffer.clear()
+
+            with self._lock:
+                self._pipeline._turn_buffer.clear()
 
             if self._on_complete and created_ids:
                 self._on_complete(created_ids)
