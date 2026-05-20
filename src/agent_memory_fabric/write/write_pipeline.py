@@ -159,10 +159,18 @@ class WritePipeline:
                     self.engine._content_hashes.add(compute_hash(target.content))
                     return target.id
 
+        from agent_memory_fabric.write.router import WriteRouter
+        ttl = None
+        if WriteRouter().has_ttl_pattern(result.content):
+            from datetime import datetime, timedelta, timezone
+            ttl = datetime.now(timezone.utc) + timedelta(days=7)
+
         node = self.engine.write(
             content=result.content,
             tags=result.suggested_tags,
             name=result.suggested_name,
+            ttl=ttl,
+            strength=min(1.0, result.confidence + 0.5),
         )
         return node.id if node else None
 

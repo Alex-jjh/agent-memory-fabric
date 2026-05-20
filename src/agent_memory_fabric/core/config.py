@@ -24,12 +24,13 @@ class RetrieverConfig(BaseModel):
 
 
 class ScorerWeights(BaseModel):
-    semantic: float = 0.30
-    graph_proximity: float = 0.15
-    recency: float = 0.15
+    semantic: float = 0.40
+    graph_proximity: float = 0.20
+    recency: float = 0.25
     frequency: float = 0.15
-    intent: float = 0.15
-    hierarchy: float = 0.10
+    # Phase 3 signals (not yet wired into MultiSignalScorer):
+    intent: float = 0.0
+    hierarchy: float = 0.0
 
 
 class AMFConfig(BaseModel):

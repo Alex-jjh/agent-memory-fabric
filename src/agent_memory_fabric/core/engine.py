@@ -137,18 +137,14 @@ class MemoryEngine:
         # Extract applicable_domains from "domain:xxx" tags
         applicable_domains = [t.split(":", 1)[1] for t in final_tags if t.lower().startswith("domain:")]
 
-        # Set confidence priors from provenance tags
-        alpha, beta_val = 1.0, 1.0
+        # Set confidence priors from provenance tags (single source of truth: BetaConfidence)
+        provenance = "default"
         for t in final_tags:
-            if t == "provenance:user_explicit":
-                alpha, beta_val = 9.0, 1.0
+            if t.startswith("provenance:"):
+                provenance = t.split(":", 1)[1]
                 break
-            elif t == "provenance:synthesized":
-                alpha, beta_val = 3.0, 2.0
-                break
-            elif t == "provenance:inferred":
-                alpha, beta_val = 3.0, 7.0
-                break
+        conf = BetaConfidence.from_provenance(provenance, is_anti_pattern=is_anti_pattern)
+        alpha, beta_val = conf.alpha, conf.beta_param
 
         node = MemoryNode(
             name=name,

@@ -51,6 +51,11 @@ def suggest_tags(content: str) -> list[str]:
         tags.append("action")
     if any(w in lower for w in ("meeting", "deadline", "date", "schedule")):
         tags.append("temporal")
+    if any(w in lower for w in ("don't", "avoid", "never use", "bad practice", "anti-pattern")):
+        tags.append("anti-pattern")
+    if any(w in lower for w in ("def ", "function", "run_python", "step 1", "procedure")):
+        tags.append("procedure")
+    tags.append("provenance:inferred")
     return tags
 
 
@@ -140,8 +145,18 @@ _LLM_EXTRACTION_SYSTEM = """You are a memory extraction agent. Extract discrete,
 
 Output a JSON array of objects, each with:
 - "content": the fact as a standalone sentence (no pronouns, include context)
-- "tags": list of relevant tags
+- "tags": list of relevant tags from these categories:
+  - Type tags: "preference", "profile", "procedure", "tool-strategy", "anti-pattern", "decision", "project"
+  - Provenance: "provenance:user_explicit" (user stated directly) or "provenance:inferred" (you inferred)
+  - Domain scope: "domain:xxx" if the fact only applies when using a specific tool/domain (e.g., "domain:git", "domain:python")
 - "confidence": 0.0-1.0 how certain this is a lasting fact (not ephemeral)
+
+Tag guidelines:
+- Use "anti-pattern" for things the user warned AGAINST doing (failures, avoid-this patterns)
+- Use "procedure" for step-by-step instructions or reusable code patterns
+- Use "tool-strategy" for tool-specific tips that worked
+- Use "domain:xxx" when a fact only applies in a specific context (tool, language, framework)
+- Always include a provenance tag
 
 Only extract facts worth remembering long-term: preferences, decisions, personal info, project details, procedures.
 Do NOT extract: greetings, confirmations, questions, ephemeral status updates."""

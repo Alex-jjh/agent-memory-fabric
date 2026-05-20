@@ -49,9 +49,9 @@ class TestSuggestTags:
         tags = suggest_tags("Meeting scheduled for next week")
         assert "temporal" in tags
 
-    def test_no_tags(self):
+    def test_minimal_tags(self):
         tags = suggest_tags("The sky is blue")
-        assert tags == []
+        assert tags == ["provenance:inferred"]
 
 
 class TestMemoryExtractor:

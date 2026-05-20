@@ -51,9 +51,11 @@ class BetaConfidence(BaseModel):
         """Create confidence prior based on how the memory was created."""
         priors = {
             "user_explicit": (9.0, 1.0),
+            "pinned": (9.0, 1.0),
             "synthesized": (3.0, 2.0),
             "inferred": (3.0, 7.0),
             "inferred_high": (5.0, 5.0),
+            "default": (1.0, 1.0),
         }
         alpha, beta = priors.get(provenance, (1.0, 1.0))
         return cls(alpha=alpha, beta_param=beta, is_anti_pattern=is_anti_pattern)
