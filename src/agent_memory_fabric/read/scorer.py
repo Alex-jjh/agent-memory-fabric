@@ -80,6 +80,8 @@ class MultiSignalScorer:
         self,
         candidates: list[MemoryNode],
         fts_scores: dict[str, float] | None = None,
+        vector_scores: dict[str, float] | None = None,
+        graph_scores: dict[str, float] | None = None,
         state_filter: set[LifecycleState] | None = None,
     ) -> list[ScoredMemory]:
         """Score and rank candidate memories.
@@ -87,6 +89,8 @@ class MultiSignalScorer:
         Args:
             candidates: Nodes to score.
             fts_scores: Optional dict of node_id -> raw BM25 score from FTS5.
+            vector_scores: Optional dict of node_id -> cosine similarity [0, 1].
+            graph_scores: Optional dict of node_id -> PPR score [0, 1].
             state_filter: Only include nodes in these states (default: Active + Decided).
 
         Returns:
@@ -96,6 +100,8 @@ class MultiSignalScorer:
             state_filter = {LifecycleState.ACTIVE, LifecycleState.DECIDED}
 
         fts_scores = fts_scores or {}
+        vector_scores = vector_scores or {}
+        graph_scores = graph_scores or {}
         scored: list[ScoredMemory] = []
 
         for node in candidates:
@@ -105,25 +111,47 @@ class MultiSignalScorer:
             bm25_raw = fts_scores.get(node.id, 0.0)
             bm25_norm = normalize_bm25(bm25_raw) if bm25_raw > 0 else 0.0
 
+            semantic = vector_scores.get(node.id, 0.0)
+
+            graph_prox = graph_scores.get(node.id, 0.0)
+
             recency = compute_decay(node.last_accessed)
 
             frequency = normalize_frequency(node.access_count)
 
             signals = {
                 "bm25": bm25_norm,
+                "semantic": semantic,
+                "graph_proximity": graph_prox,
                 "recency": recency,
                 "frequency": frequency,
             }
 
-            # Phase 2: only 3 signals active. Normalize weights to sum to 1.0.
-            # weights.semantic used for BM25 until Phase 3 adds embedding signal.
-            active_weight_sum = self.weights.semantic + self.weights.recency + self.weights.frequency
-            total = (
-                (self.weights.semantic * bm25_norm
-                 + self.weights.recency * recency
-                 + self.weights.frequency * frequency)
-                / active_weight_sum
-            ) if active_weight_sum > 0 else 0.0
+            # Compute weighted sum. Use BM25 weight from semantic slot when
+            # no vector scores provided; when both exist, split evenly.
+            if vector_scores:
+                bm25_weight = self.weights.semantic * 0.5
+                sem_weight = self.weights.semantic * 0.5
+            else:
+                bm25_weight = self.weights.semantic
+                sem_weight = 0.0
+
+            raw_total = (
+                bm25_weight * bm25_norm
+                + sem_weight * semantic
+                + self.weights.graph_proximity * graph_prox
+                + self.weights.recency * recency
+                + self.weights.frequency * frequency
+            )
+
+            # Normalize by sum of active weights
+            active_sum = (
+                bm25_weight + sem_weight
+                + (self.weights.graph_proximity if graph_scores else 0.0)
+                + self.weights.recency
+                + self.weights.frequency
+            )
+            total = raw_total / active_sum if active_sum > 0 else 0.0
 
             scored.append(ScoredMemory(
                 node=node,

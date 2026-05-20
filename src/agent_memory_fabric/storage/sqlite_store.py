@@ -53,6 +53,8 @@ class SQLiteStore:
     def __init__(self, db_path: Path | str):
         self.db_path = Path(db_path) if not isinstance(db_path, Path) else db_path
         self._conn: Optional[sqlite3.Connection] = None
+        self._vec_available: Optional[bool] = None
+        self._vec_initialized: bool = False
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -212,8 +214,53 @@ class SQLiteStore:
         for node in filesystem_nodes:
             self.upsert_node(node)
 
+    def _ensure_vec_table(self, dimension: int) -> None:
+        """Create the vec0 virtual table if sqlite-vec is available."""
+        if self._vec_available is None:
+            conn = self._get_conn()
+            try:
+                import sqlite_vec
+                conn.enable_load_extension(True)
+                sqlite_vec.load(conn)
+                conn.enable_load_extension(False)
+                self._vec_available = True
+            except (ImportError, Exception):
+                self._vec_available = False
+
+        if self._vec_available and not self._vec_initialized:
+            conn = self._get_conn()
+            conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0("
+                f"node_id TEXT PRIMARY KEY, embedding float[{dimension}])"
+            )
+            conn.commit()
+            self._vec_initialized = True
+
     def search_vector(self, embedding: list[float], limit: int = 10) -> list[tuple[str, float]]:
-        raise NotImplementedError("Phase 3: requires sqlite-vec")
+        """Vector similarity search via sqlite-vec. Returns (node_id, distance) pairs.
+
+        Falls back to empty results if sqlite-vec is not available.
+        """
+        if not getattr(self, "_vec_available", None):
+            return []
+        conn = self._get_conn()
+        import struct
+        blob = struct.pack(f"{len(embedding)}f", *embedding)
+        rows = conn.execute(
+            "SELECT node_id, distance FROM vec_embeddings WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+            (blob, limit),
+        ).fetchall()
+        return [(row[0], row[1]) for row in rows]
 
     def upsert_embedding(self, node_id: str, embedding: list[float]) -> None:
-        raise NotImplementedError("Phase 3: requires sqlite-vec")
+        """Store or update embedding for a node. No-op if sqlite-vec unavailable."""
+        if not getattr(self, "_vec_available", None):
+            return
+        conn = self._get_conn()
+        import struct
+        blob = struct.pack(f"{len(embedding)}f", *embedding)
+        conn.execute(
+            "INSERT OR REPLACE INTO vec_embeddings (node_id, embedding) VALUES (?, ?)",
+            (node_id, blob),
+        )
+        conn.commit()

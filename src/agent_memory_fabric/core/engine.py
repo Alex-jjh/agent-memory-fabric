@@ -14,7 +14,10 @@ from agent_memory_fabric.lifecycle.transitions import (
     TemporalDecayPredicate,
     TTLExpirationPredicate,
 )
-from agent_memory_fabric.read.scorer import MultiSignalScorer
+from agent_memory_fabric.lifecycle.confidence import BetaConfidence
+from agent_memory_fabric.read.embeddings import EmbeddingProvider
+from agent_memory_fabric.read.gateway import ProactiveGateway
+from agent_memory_fabric.read.scorer import MultiSignalScorer, ScoredMemory
 from agent_memory_fabric.storage.graph import build_edges_from_wikilinks
 from agent_memory_fabric.storage.markdown import MarkdownStore
 from agent_memory_fabric.storage.sqlite_store import SQLiteStore
@@ -177,16 +180,63 @@ class MemoryEngine:
 
     def run_consolidation(self) -> int:
         """Merge duplicates and synthesize insights. Returns count of nodes affected."""
-        raise NotImplementedError("Phase 3: consolidation engine")
+        raise NotImplementedError("Phase 4: consolidation engine")
 
     def retrieve_proactive(
         self,
         message: str,
         scope: str | None = None,
         top_k: int | None = None,
-    ) -> list[MemoryNode]:
-        """Proactive retrieval: select relevant memories for an incoming message."""
-        raise NotImplementedError("Phase 3: proactive gateway")
+        embedding_provider: EmbeddingProvider | None = None,
+    ) -> list[ScoredMemory]:
+        """Proactive retrieval: select relevant memories for an incoming message.
+
+        Uses the full pipeline: abstain gate → multi-signal scoring → tier assignment.
+        Returns empty list if abstain gate fires.
+        """
+        gateway = ProactiveGateway(
+            sqlite_store=self.sqlite_store,
+            scorer=self.scorer,
+            config=self.config.retriever,
+            embedding_provider=embedding_provider,
+        )
+
+        all_nodes = self.markdown_store.list_all()
+        return gateway.retrieve(message, all_nodes, scope=scope, top_k=top_k)
+
+    def update_confidence(
+        self, node_id: str, success: bool, weight: float = 1.0
+    ) -> Optional[MemoryNode]:
+        """Record a confidence outcome for a memory node.
+
+        If confidence drops below threshold, may trigger accelerated state transition.
+        Returns updated node, or None if not found.
+        """
+        node = self.markdown_store.read(node_id)
+        if node is None:
+            return None
+
+        if not hasattr(node, "_confidence"):
+            node._confidence = BetaConfidence()
+
+        node._confidence.record_outcome(success, weight)
+
+        # Check if low confidence should accelerate decay
+        if node._confidence.should_accelerate_decay():
+            for predicate in self._predicates:
+                confidence_val = node._confidence.effective_confidence()
+                if hasattr(predicate, "evaluate") and "confidence" in predicate.evaluate.__code__.co_varnames:
+                    target = predicate.evaluate(node, confidence=confidence_val)
+                else:
+                    target = predicate.evaluate(node)
+                if target and self.state_machine.can_transition(node, target):
+                    self.state_machine.transition(node, target)
+                    node.modified = datetime.now(timezone.utc)
+                    break
+
+        self.markdown_store.write(node)
+        self.sqlite_store.upsert_node(node, content=node.content)
+        return node
 
     def search(
         self,
