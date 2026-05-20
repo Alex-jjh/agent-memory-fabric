@@ -53,3 +53,55 @@ def compute_decay(
         return exponential_decay(hours, half_life_hours)
     else:
         raise ValueError(f"Unknown decay model: {model}")
+
+
+def heat_score(
+    visits: int,
+    interaction_len: float,
+    hours_since: float,
+    alpha: float = 1.0,
+    beta: float = 1.0,
+    gamma: float = 1.0,
+    tau_hours: float = 24.0,
+) -> float:
+    """Heat-based scoring combining frequency, engagement, and recency.
+
+    Adapted from MemoryOS (Apache 2.0) three-signal formula.
+    """
+    recency = math.exp(-max(0.0, hours_since) / max(0.01, tau_hours))
+    return alpha * visits + beta * interaction_len + gamma * recency
+
+
+def composite_score(
+    use_count: int,
+    hours_since: float,
+    strength: float = 1.0,
+    beta: float = 0.6,
+    decay_model: str = "power_law",
+) -> float:
+    """CortexGraph-inspired composite: usage amplification × temporal decay × strength.
+
+    Clean-room reimplementation of the architectural idea.
+    """
+    use_component = math.pow(max(use_count, 0) + 1, beta)
+    if decay_model == "power_law":
+        decay_component = power_law_decay(hours_since, strength=1.0)
+    else:
+        decay_component = exponential_decay(hours_since)
+    return use_component * decay_component * strength
+
+
+def gaussian_recency(
+    age_hours: float,
+    scale_hours: float = 168.0,
+    decay_factor: float = 0.5,
+) -> float:
+    """Gaussian decay for query-time recency scoring.
+
+    Inspired by AgentCore's OpenSearch function_score pattern.
+    Returns 1.0 at age=0, dropping to exp(-decay_factor) at age=scale_hours.
+    With default decay_factor=0.5, value at scale_hours ≈ 0.607.
+    """
+    if scale_hours <= 0:
+        return 0.0
+    return math.exp(-decay_factor * (max(0.0, age_hours) / scale_hours) ** 2)

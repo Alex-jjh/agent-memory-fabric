@@ -76,6 +76,8 @@ class MarkdownStore:
             frontmatter["project"] = node.project
         if node.ttl:
             frontmatter["ttl"] = node.ttl.isoformat()
+        if node.applicable_domains:
+            frontmatter["applicable_domains"] = node.applicable_domains
 
         fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return f"---\n{fm_str}---\n{node.content}\n"
@@ -107,6 +109,7 @@ class MarkdownStore:
             ttl=datetime.fromisoformat(data["ttl"]) if data.get("ttl") else None,
             tags=data.get("tags", []),
             links=data.get("links", []),
+            applicable_domains=data.get("applicable_domains", []),
         )
 
     def write(self, node: MemoryNode) -> Path:

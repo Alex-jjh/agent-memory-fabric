@@ -1,12 +1,14 @@
-"""Memory extraction — identifies what to remember from conversations.
-
-Rule-based V1 for testing. LLM-based extraction is Phase 3.
-"""
+"""Memory extraction — identifies what to remember from conversations."""
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_memory_fabric.llm.provider import LLMProvider
 
 
 @dataclass
@@ -130,3 +132,99 @@ class MemoryExtractor:
             confidence += 0.1
 
         return max(0.0, min(1.0, confidence))
+
+
+_LLM_EXTRACTION_SYSTEM = """You are a memory extraction agent. Extract discrete, standalone facts from the conversation.
+
+Output a JSON array of objects, each with:
+- "content": the fact as a standalone sentence (no pronouns, include context)
+- "tags": list of relevant tags
+- "confidence": 0.0-1.0 how certain this is a lasting fact (not ephemeral)
+
+Only extract facts worth remembering long-term: preferences, decisions, personal info, project details, procedures.
+Do NOT extract: greetings, confirmations, questions, ephemeral status updates."""
+
+_LLM_EXTRACTION_USER = """Extract memories from this conversation segment:
+
+<context>
+{context}
+</context>
+
+<current>
+{content}
+</current>
+
+Only extract facts from <current>, using <context> for disambiguation only.
+Output JSON array:"""
+
+_GLEANING_PROMPT = """Review the facts you just extracted. Did you miss any important information?
+Look specifically for: preferences, decisions, relationships, deadlines, project structure.
+Output additional facts as a JSON array (empty array [] if nothing was missed):"""
+
+
+class LLMExtractor:
+    """LLM-based memory extraction with multi-pass gleaning."""
+
+    def __init__(self, provider: "LLMProvider", max_gleaning_passes: int = 1):
+        self.provider = provider
+        self.max_gleaning_passes = max_gleaning_passes
+
+    def extract(self, text: str, context: str | None = None) -> list[ExtractionResult]:
+        """Extract memories using LLM with optional gleaning pass."""
+        user_prompt = _LLM_EXTRACTION_USER.format(
+            context=context or "(no prior context)",
+            content=text,
+        )
+
+        try:
+            response = self.provider.complete(_LLM_EXTRACTION_SYSTEM, user_prompt)
+            results = self._parse_response(response)
+        except Exception:
+            return []
+
+        for _ in range(self.max_gleaning_passes):
+            if not results:
+                break
+            try:
+                gleaning_response = self.provider.complete(
+                    _LLM_EXTRACTION_SYSTEM,
+                    user_prompt + "\n\n" + response + "\n\n" + _GLEANING_PROMPT,
+                )
+                additional = self._parse_response(gleaning_response)
+                if not additional:
+                    break
+                results.extend(additional)
+                response += "\n" + gleaning_response
+            except Exception:
+                break
+
+        return results
+
+    def _parse_response(self, response: str) -> list[ExtractionResult]:
+        """Parse LLM JSON response into ExtractionResults."""
+        response = response.strip()
+        start = response.find("[")
+        end = response.rfind("]")
+        if start == -1 or end == -1:
+            return []
+
+        try:
+            items = json.loads(response[start:end + 1])
+        except (json.JSONDecodeError, ValueError):
+            return []
+
+        results: list[ExtractionResult] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content", "").strip()
+            if not content or len(content.split()) < 3:
+                continue
+            results.append(ExtractionResult(
+                content=content,
+                suggested_name=generate_name(content),
+                suggested_tags=item.get("tags", []),
+                confidence=min(1.0, max(0.0, float(item.get("confidence", 0.5)))),
+            ))
+
+        return results

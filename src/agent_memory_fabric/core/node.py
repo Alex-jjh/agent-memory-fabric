@@ -52,6 +52,7 @@ class MemoryNode(BaseModel):
     ttl: Optional[datetime] = None
     tags: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
+    applicable_domains: list[str] = Field(default_factory=list)
 
     def is_retrievable(self, include_archived: bool = False) -> bool:
         if self.state == LifecycleState.EXPIRED:

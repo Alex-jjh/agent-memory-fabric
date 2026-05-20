@@ -12,10 +12,15 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+import math
+
 RECENCY_DECAY = 0.8
 MAX_RECENT_OUTCOMES = 15
 ACCELERATE_DECAY_THRESHOLD = 0.3
 RESIST_TRANSITION_THRESHOLD = 0.8
+ANTI_PATTERN_CAP = 0.6
+BASE_WEIGHT = 0.7
+RECENT_WEIGHT = 0.3
 
 
 @dataclass
@@ -39,20 +44,19 @@ class BetaConfidence(BaseModel):
     beta_param: float = Field(default=1.0, ge=0.01)
     recent_outcomes: list[dict] = Field(default_factory=list)
 
-    @classmethod
-    def from_provenance(cls, provenance: str) -> BetaConfidence:
-        """Create confidence prior based on how the memory was created.
+    is_anti_pattern: bool = Field(default=False)
 
-        - user_explicit: User directly stated this (high prior, ~0.9)
-        - inferred: System inferred from context (neutral prior, ~0.5)
-        - synthesized: Auto-generated summary (moderate prior, ~0.6)
-        """
-        if provenance == "user_explicit":
-            return cls(alpha=9.0, beta_param=1.0)
-        elif provenance == "synthesized":
-            return cls(alpha=3.0, beta_param=2.0)
-        else:
-            return cls(alpha=1.0, beta_param=1.0)
+    @classmethod
+    def from_provenance(cls, provenance: str, is_anti_pattern: bool = False) -> BetaConfidence:
+        """Create confidence prior based on how the memory was created."""
+        priors = {
+            "user_explicit": (9.0, 1.0),
+            "synthesized": (3.0, 2.0),
+            "inferred": (3.0, 7.0),
+            "inferred_high": (5.0, 5.0),
+        }
+        alpha, beta = priors.get(provenance, (1.0, 1.0))
+        return cls(alpha=alpha, beta_param=beta, is_anti_pattern=is_anti_pattern)
 
     @property
     def base_confidence(self) -> float:
@@ -80,18 +84,23 @@ class BetaConfidence(BaseModel):
             self.recent_outcomes = self.recent_outcomes[-MAX_RECENT_OUTCOMES:]
 
     def effective_confidence(self, recency_weight: float = 0.3) -> float:
-        """Blended confidence combining base prior + recent outcomes.
+        """Blended confidence using weighted geometric mean.
 
-        Formula: (1 - recency_weight) * base + recency_weight * recent_ema
+        Formula: base^0.7 * max(recent, 0.01)^0.3
+        Anti-patterns are capped at ANTI_PATTERN_CAP (0.6).
         """
-        base = self.base_confidence
+        base = max(self.base_confidence, 0.01)
 
         if not self.recent_outcomes:
-            return base
+            result = base
+        else:
+            recent_score = max(self._compute_recent_ema(), 0.01)
+            result = math.pow(base, BASE_WEIGHT) * math.pow(recent_score, RECENT_WEIGHT)
 
-        recent_score = self._compute_recent_ema()
-        blended = (1.0 - recency_weight) * base + recency_weight * recent_score
-        return max(0.0, min(1.0, blended))
+        if self.is_anti_pattern:
+            result = min(result, ANTI_PATTERN_CAP)
+
+        return max(0.0, min(1.0, result))
 
     def _compute_recent_ema(self) -> float:
         """Exponentially-weighted moving average of recent outcomes."""
@@ -133,3 +142,23 @@ class BetaConfidence(BaseModel):
     def outcome_count(self) -> int:
         """Total number of observations recorded."""
         return len(self.recent_outcomes)
+
+
+class MutationLedger:
+    """Tracks confidence mutations to enforce max 1 per node per cycle."""
+
+    def __init__(self):
+        self._mutated: set[str] = set()
+
+    def can_mutate(self, node_id: str) -> bool:
+        return node_id not in self._mutated
+
+    def record(self, node_id: str) -> None:
+        self._mutated.add(node_id)
+
+    def reset(self) -> None:
+        self._mutated.clear()
+
+    @property
+    def count(self) -> int:
+        return len(self._mutated)

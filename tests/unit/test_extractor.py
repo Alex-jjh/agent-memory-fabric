@@ -109,3 +109,59 @@ class TestMemoryExtractor:
 Assistant: Got it, I'll remember your preference for vim keybindings."""
         results = self.extractor.extract(text)
         assert len(results) >= 1
+
+
+class TestLLMExtractor:
+    def test_parses_valid_json_response(self):
+        from agent_memory_fabric.llm.provider import MockProvider
+        from agent_memory_fabric.write.extractor import LLMExtractor
+
+        provider = MockProvider(default_response='[{"content": "User lives in Shanghai", "tags": ["profile"], "confidence": 0.9}]')
+        extractor = LLMExtractor(provider=provider, max_gleaning_passes=0)
+        results = extractor.extract("I live in Shanghai")
+        assert len(results) == 1
+        assert "Shanghai" in results[0].content
+        assert results[0].confidence == 0.9
+
+    def test_handles_invalid_json(self):
+        from agent_memory_fabric.llm.provider import MockProvider
+        from agent_memory_fabric.write.extractor import LLMExtractor
+
+        provider = MockProvider(default_response="not json at all")
+        extractor = LLMExtractor(provider=provider)
+        results = extractor.extract("test input")
+        assert results == []
+
+    def test_handles_provider_exception(self):
+        from agent_memory_fabric.llm.provider import MockProvider
+        from agent_memory_fabric.write.extractor import LLMExtractor
+
+        class FailProvider:
+            def complete(self, system, user):
+                raise RuntimeError("API error")
+
+        extractor = LLMExtractor(provider=FailProvider(), max_gleaning_passes=0)
+        results = extractor.extract("test")
+        assert results == []
+
+    def test_gleaning_adds_results(self):
+        from agent_memory_fabric.llm.provider import MockProvider
+        from agent_memory_fabric.write.extractor import LLMExtractor
+
+        provider = MockProvider()
+        provider.set_responses([
+            '[{"content": "User prefers dark mode", "tags": ["preference"], "confidence": 0.8}]',
+            '[{"content": "User works at Amazon", "tags": ["profile"], "confidence": 0.7}]',
+        ])
+        extractor = LLMExtractor(provider=provider, max_gleaning_passes=1)
+        results = extractor.extract("I prefer dark mode and I work at Amazon")
+        assert len(results) == 2
+
+    def test_filters_short_content(self):
+        from agent_memory_fabric.llm.provider import MockProvider
+        from agent_memory_fabric.write.extractor import LLMExtractor
+
+        provider = MockProvider(default_response='[{"content": "ok", "tags": [], "confidence": 0.5}]')
+        extractor = LLMExtractor(provider=provider, max_gleaning_passes=0)
+        results = extractor.extract("test")
+        assert results == []

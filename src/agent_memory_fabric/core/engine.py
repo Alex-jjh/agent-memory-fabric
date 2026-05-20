@@ -12,6 +12,7 @@ from agent_memory_fabric.core.node import LifecycleState, MemoryNode, MemoryType
 from agent_memory_fabric.lifecycle.state_machine import StateMachine
 from agent_memory_fabric.lifecycle.transitions import (
     InactivityArchivePredicate,
+    PromotionPredicate,
     TemporalDecayPredicate,
     TTLExpirationPredicate,
 )
@@ -40,9 +41,12 @@ class MemoryEngine:
         self.sqlite_store = SQLiteStore(self.config.get_db_path())
         self.state_machine = StateMachine(self.config.decay)
         self.write_router = WriteRouter()
-        self.scorer = MultiSignalScorer(self.config.scorer_weights)
+        self.scorer = MultiSignalScorer(self.config.scorer_weights, decay_config=self.config.decay)
         self._predicates = [
             TTLExpirationPredicate(),
+            PromotionPredicate(
+                score_threshold=self.config.decay.promote_threshold,
+            ),
             TemporalDecayPredicate(
                 decay_threshold=self.config.decay.forget_threshold,
                 min_inactive_days=14,
@@ -183,13 +187,20 @@ class MemoryEngine:
         active_nodes = self.sqlite_store.get_all_nodes(state="active")
         decided_nodes = self.sqlite_store.get_all_nodes(state="decided")
 
+        from agent_memory_fabric.lifecycle.transitions import TemporalDecayPredicate
+
         for row in active_nodes + decided_nodes:
             node = self.markdown_store.read(row["id"])
             if node is None:
                 continue
 
+            confidence = node.confidence_alpha / (node.confidence_alpha + node.confidence_beta)
+
             for predicate in self._predicates:
-                target = predicate.evaluate(node)
+                if isinstance(predicate, TemporalDecayPredicate):
+                    target = predicate.evaluate(node, confidence=confidence)
+                else:
+                    target = predicate.evaluate(node)
                 if target is not None and self.state_machine.can_transition(node, target):
                     old_state = node.state
                     self.state_machine.transition(node, target)
@@ -226,6 +237,21 @@ class MemoryEngine:
                 archived.append((node.id, reason))
 
         return archived
+
+    def run_trim(self, max_count: int | None = None) -> int:
+        """Trim lowest-value memories if corpus exceeds capacity. Returns count trimmed."""
+        from agent_memory_fabric.lifecycle.trim import AutoTrimmer
+
+        trimmer = AutoTrimmer(max_count=max_count or 10000)
+        active = self.list_nodes(state="active")
+        decided = self.list_nodes(state="decided")
+        total = len(active) + len(decided)
+        if not trimmer.needs_trim(total):
+            return 0
+
+        nodes = [n for n in self.markdown_store.list_all() if n.state in (LifecycleState.ACTIVE, LifecycleState.DECIDED)]
+        to_trim = trimmer.select_for_trim(nodes)
+        return trimmer.execute_trim(self, to_trim)
 
     def run_consolidation(self) -> int:
         """Merge duplicates and synthesize insights. Returns count of nodes affected."""

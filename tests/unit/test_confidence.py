@@ -10,9 +10,9 @@ class TestFromProvenance:
         c = BetaConfidence.from_provenance("user_explicit")
         assert c.base_confidence == pytest.approx(0.9, abs=0.01)
 
-    def test_inferred_neutral(self):
+    def test_inferred_low(self):
         c = BetaConfidence.from_provenance("inferred")
-        assert c.base_confidence == pytest.approx(0.5, abs=0.01)
+        assert c.base_confidence == pytest.approx(0.3, abs=0.01)
 
     def test_synthesized_moderate(self):
         c = BetaConfidence.from_provenance("synthesized")
@@ -87,13 +87,17 @@ class TestEffectiveConfidence:
             c2.record_outcome(success=True)
         assert 0.0 <= c2.effective_confidence() <= 1.0
 
-    def test_recency_weight_controls_blend(self):
-        c = BetaConfidence(alpha=1.0, beta_param=9.0)
+    def test_geometric_mean_blends_base_and_recent(self):
+        c = BetaConfidence(alpha=1.0, beta_param=9.0)  # base = 0.1
+        base_only = c.effective_confidence()
         for _ in range(10):
             c.record_outcome(success=True)
-        low_recency = c.effective_confidence(recency_weight=0.1)
-        high_recency = c.effective_confidence(recency_weight=0.9)
-        assert high_recency > low_recency
+        with_successes = c.effective_confidence()
+        assert with_successes > base_only
+
+    def test_anti_pattern_cap(self):
+        c = BetaConfidence(alpha=9.0, beta_param=1.0, is_anti_pattern=True)
+        assert c.effective_confidence() <= 0.6
 
 
 class TestPhase3Interface:

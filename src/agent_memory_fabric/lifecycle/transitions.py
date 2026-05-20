@@ -7,6 +7,7 @@ from typing import Protocol
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode
 from agent_memory_fabric.lifecycle.decay import compute_decay
+from agent_memory_fabric.lifecycle.protection import is_protected
 
 
 class TransitionPredicate(Protocol):
@@ -33,6 +34,8 @@ class TemporalDecayPredicate:
         self, node: MemoryNode, confidence: float | None = None
     ) -> LifecycleState | None:
         if node.state != LifecycleState.ACTIVE:
+            return None
+        if is_protected(node):
             return None
 
         now = datetime.now(timezone.utc)
@@ -84,11 +87,53 @@ class InactivityArchivePredicate:
     def evaluate(self, node: MemoryNode) -> LifecycleState | None:
         if node.state != LifecycleState.DECIDED:
             return None
+        if is_protected(node):
+            return None
 
         now = datetime.now(timezone.utc)
         inactive_days = (now - node.last_accessed).total_seconds() / 86400
 
         if inactive_days > self.inactive_days:
             return LifecycleState.ARCHIVED
+
+        return None
+
+
+class PromotionPredicate:
+    """Promote Active nodes to Decided when they demonstrate sustained value.
+
+    Two paths to promotion:
+    1. High composite score (decay-resistant, frequently accessed) AND minimum age met
+    2. High access count within a recent time window
+    """
+
+    def __init__(
+        self,
+        score_threshold: float = 0.65,
+        access_threshold: int = 5,
+        window_days: int = 14,
+        min_age_days: float = 1.0,
+    ):
+        self.score_threshold = score_threshold
+        self.access_threshold = access_threshold
+        self.window_days = window_days
+        self.min_age_days = min_age_days
+
+    def evaluate(self, node: MemoryNode) -> LifecycleState | None:
+        if node.state != LifecycleState.ACTIVE:
+            return None
+
+        now = datetime.now(timezone.utc)
+        age_days = (now - node.created).total_seconds() / 86400
+
+        if age_days < self.min_age_days:
+            return None
+
+        score = compute_decay(node.last_accessed, strength=node.strength)
+        if score >= self.score_threshold and node.access_count >= 2:
+            return LifecycleState.DECIDED
+
+        if node.access_count >= self.access_threshold and age_days <= self.window_days:
+            return LifecycleState.DECIDED
 
         return None

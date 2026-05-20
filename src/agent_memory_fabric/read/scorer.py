@@ -10,9 +10,9 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from agent_memory_fabric.core.config import ScorerWeights
+from agent_memory_fabric.core.config import DecayConfig, ScorerWeights
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode
-from agent_memory_fabric.lifecycle.decay import compute_decay
+from agent_memory_fabric.lifecycle.decay import DecayModel, compute_decay
 
 
 @dataclass
@@ -73,8 +73,9 @@ class MultiSignalScorer:
     - intent: Match between query intent and node type
     """
 
-    def __init__(self, weights: ScorerWeights | None = None):
+    def __init__(self, weights: ScorerWeights | None = None, decay_config: DecayConfig | None = None):
         self.weights = weights or ScorerWeights()
+        self.decay_config = decay_config or DecayConfig()
 
     def score(
         self,
@@ -115,7 +116,12 @@ class MultiSignalScorer:
 
             graph_prox = graph_scores.get(node.id, 0.0)
 
-            recency = compute_decay(node.last_accessed)
+            recency = compute_decay(
+                node.last_accessed,
+                model=self.decay_config.model,
+                strength=node.strength,
+                half_life_hours=self.decay_config.half_life_days * 24.0,
+            )
 
             frequency = normalize_frequency(node.access_count)
 
@@ -160,6 +166,23 @@ class MultiSignalScorer:
             ))
 
         scored.sort(key=lambda s: s.total_score, reverse=True)
+        self._assign_tiers(scored)
+        return scored
+
+    def apply_multiplicative_boosts(
+        self,
+        scored: list[ScoredMemory],
+        recency_alpha: float = 0.3,
+        confidence_alpha: float = 0.2,
+    ) -> list[ScoredMemory]:
+        """Apply multiplicative boosts to base scores for sharper differentiation."""
+        for s in scored:
+            recency = s.signal_breakdown.get("recency", 0.5)
+            confidence = s.node.confidence_alpha / (s.node.confidence_alpha + s.node.confidence_beta)
+            recency_boost = 1.0 + recency_alpha * (recency - 0.5)
+            confidence_boost = 1.0 + confidence_alpha * (confidence - 0.5)
+            s.total_score *= recency_boost * confidence_boost
+        scored.sort(key=lambda x: x.total_score, reverse=True)
         self._assign_tiers(scored)
         return scored
 
