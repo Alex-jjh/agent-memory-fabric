@@ -32,6 +32,8 @@ from agent_memory_fabric.llm.provider import LLMProvider
 from agent_memory_fabric.read.embeddings import EmbeddingProvider
 from agent_memory_fabric.read.gateway import ProactiveGateway
 from agent_memory_fabric.read.injection import format_interpretation_rules, format_memories_xml, inject_into_message
+from agent_memory_fabric.read.manifest import MemoryManifest
+from agent_memory_fabric.read.query_expansion import QueryExpander
 from agent_memory_fabric.write.write_pipeline import WritePipeline
 
 
@@ -50,6 +52,7 @@ class AMFOrchestrator:
         embedding_provider: EmbeddingProvider | None = None,
         use_llm_extraction: bool = True,
         use_consolidation: bool = True,
+        async_extraction: bool = False,
         total_budget_tokens: int = 4000,
     ):
         self.config = config or AMFConfig()
@@ -68,6 +71,11 @@ class AMFOrchestrator:
             use_consolidation=use_consolidation,
         )
 
+        self.async_pipeline = None
+        if async_extraction:
+            from agent_memory_fabric.write.async_pipeline import AsyncWritePipeline
+            self.async_pipeline = AsyncWritePipeline(self.write_pipeline)
+
         self.gateway = ProactiveGateway(
             sqlite_store=self.engine.sqlite_store,
             scorer=self.engine.scorer,
@@ -76,8 +84,14 @@ class AMFOrchestrator:
             total_budget_tokens=total_budget_tokens,
         )
 
+        if llm_provider:
+            from agent_memory_fabric.read.reranker import LLMReranker
+            self.gateway.reranker = LLMReranker(provider=llm_provider)
+
         self.anti_pattern_tracker = AntiPatternTracker()
+        self.query_expander = QueryExpander()
         self._interpretation_rules: str = format_interpretation_rules()
+        self._manifest = MemoryManifest()
 
     def on_user_message(
         self,
@@ -93,14 +107,21 @@ class AMFOrchestrator:
         """
         self.anti_pattern_tracker.clear_turn()
 
+        # Expand short queries with prior turn context
+        retrieval_query = self.query_expander.expand(message)
+        self.query_expander.record_turn("user", message)
+
         # Retrieve BEFORE write to avoid same-turn echo
         candidates = self._get_candidates(scope)
         scored = self.gateway.retrieve(
-            message, candidates, scope=scope, active_domain=active_domain,
+            retrieval_query, candidates, scope=scope, active_domain=active_domain,
         )
 
         # Write pipeline runs after retrieval (extractions available for future turns)
-        self.write_pipeline.on_turn(message, has_tool_calls=has_tool_calls, has_save_hint=has_save_hint)
+        if self.async_pipeline:
+            self.async_pipeline.schedule_turn(message, has_tool_calls=has_tool_calls, has_save_hint=has_save_hint)
+        else:
+            self.write_pipeline.on_turn(message, has_tool_calls=has_tool_calls, has_save_hint=has_save_hint)
 
         if not scored:
             return ""
@@ -116,6 +137,7 @@ class AMFOrchestrator:
         has_tool_calls: bool = False,
     ) -> list[str]:
         """Process an assistant message for extraction only. Returns created memory IDs."""
+        self.query_expander.record_turn("assistant", message)
         return self.write_pipeline.on_turn(message, has_tool_calls=has_tool_calls)
 
     def on_tool_success(self, tool_name: str) -> list[str]:
@@ -130,6 +152,8 @@ class AMFOrchestrator:
 
     def on_session_end(self) -> list[str]:
         """Force extraction of any remaining buffered turns."""
+        if self.async_pipeline:
+            return self.async_pipeline.flush()
         return self.write_pipeline.force_extract()
 
     def run_maintenance(self) -> dict[str, int]:
@@ -141,9 +165,33 @@ class AMFOrchestrator:
             "trimmed": trimmed,
         }
 
+    def get_manifest(self, scope: str | None = None) -> str:
+        """Get the memory manifest for system prompt injection.
+
+        Returns a scannable index of all memories (sorted newest-first, truncated).
+        The LLM uses this to know what memories exist without reading full content.
+        """
+        candidates = self._get_candidates(scope)
+        return self._manifest.generate_cached(candidates)
+
     def get_interpretation_rules(self) -> str:
         """Get the interpretation rules section for system prompt."""
         return self._interpretation_rules
+
+    def recall(self, query: str, top_k: int = 5, scope: str | None = None) -> list[dict]:
+        """Agent-initiated reactive memory search. Returns formatted dicts."""
+        results = self.engine.search(query, top_k=top_k, scope=scope)
+        return [
+            {
+                "id": n.id,
+                "content": n.content,
+                "type": n.type.value,
+                "confidence": round(n.confidence_alpha / (n.confidence_alpha + n.confidence_beta), 2),
+                "tags": n.tags,
+                "last_accessed": n.last_accessed.isoformat(),
+            }
+            for n in results
+        ]
 
     def search(self, query: str, top_k: int = 5, scope: str | None = None) -> list[MemoryNode]:
         """Direct search (bypasses full pipeline). Useful for tools/debugging."""

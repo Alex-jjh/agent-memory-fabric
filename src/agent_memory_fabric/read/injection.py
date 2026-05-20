@@ -98,6 +98,13 @@ def inject_into_message(user_message: str, memories_xml: str) -> str:
     return f"{memories_xml}\n\n{user_message}"
 
 
+def format_manifest_for_system_prompt(manifest: str) -> str:
+    """Wrap manifest in XML tags for system prompt injection."""
+    if not manifest:
+        return ""
+    return f"<memory_manifest>\n{manifest}\n</memory_manifest>"
+
+
 def format_interpretation_rules() -> str:
     """Generate system prompt section with memory interpretation rules."""
     return """<memory_interpretation_rules>
@@ -109,5 +116,6 @@ When using memories from <learned_context>:
 - [user explicit] > [inferred] when conflicting
 - Anti-patterns (cert < 60%) are guidance, not rules — never refuse a tool solely on a low-certainty anti-pattern
 - Facts older than 2 weeks with cert < 70%: note potential staleness
+- Memory timestamps reflect when information was recorded, not necessarily current state — this may be stale
 - If ambiguous + low-confidence + user is asking directly: offer to verify
 </memory_interpretation_rules>"""

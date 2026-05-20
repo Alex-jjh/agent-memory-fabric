@@ -16,6 +16,7 @@ from agent_memory_fabric.lifecycle.transitions import (
     TemporalDecayPredicate,
     TTLExpirationPredicate,
 )
+from agent_memory_fabric.core.secret_scanner import SecretDetectedError, scan_for_secrets
 from agent_memory_fabric.lifecycle.confidence import BetaConfidence
 from agent_memory_fabric.llm.contradiction import detect_contradictions
 from agent_memory_fabric.llm.provider import LLMProvider
@@ -104,6 +105,11 @@ class MemoryEngine:
         ttl: datetime | None,
         strength: float,
     ) -> Optional[MemoryNode]:
+        # Secret scan gate
+        secret_matches = scan_for_secrets(content)
+        if secret_matches:
+            raise SecretDetectedError(secret_matches)
+
         # Fast-path dedup via WriteRouter
         op = self.write_router.classify(content, existing_hashes=self._content_hashes)
         if op is None:
@@ -314,6 +320,13 @@ class MemoryEngine:
             if target and self.state_machine.can_transition(node, target):
                 self.state_machine.transition(node, target)
                 node.modified = datetime.now(timezone.utc)
+
+        # Procedure auto-delete: 3+ failures with 0 successes
+        from agent_memory_fabric.lifecycle.procedure_gc import should_auto_delete
+        if should_auto_delete(node):
+            self.markdown_store.delete(node.id)
+            self.sqlite_store.delete_node(node.id)
+            return None
 
         self.markdown_store.write(node)
         self.sqlite_store.upsert_node(node, content=node.content)

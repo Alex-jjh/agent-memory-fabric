@@ -1,0 +1,19 @@
+---
+id: a142ccd0-1a8f-42b6-be2d-e0d592840da2
+name: caroline-yep-melanie-being-ourselves
+state: active
+type: project
+created: '2026-05-11T13:23:04.826320+00:00'
+modified: '2026-05-11T13:23:04.826320+00:00'
+last_accessed: '2026-05-11T13:23:04.826320+00:00'
+access_count: 0
+decay_score: 1.0
+strength: 1.0
+confidence_alpha: 1.0
+confidence_beta: 1.0
+tags:
+- session:entry0_session_17
+- speaker:Caroline
+links: []
+---
+[Caroline] Yep, Melanie! Being ourselves is such a great feeling. It's an ongoing adventure of learning and growing.

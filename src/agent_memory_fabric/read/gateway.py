@@ -22,6 +22,7 @@ from agent_memory_fabric.read.domain_expansion import filter_by_domain, find_rel
 from agent_memory_fabric.read.embeddings import EmbeddingProvider, cosine_similarity
 from agent_memory_fabric.read.injection import format_memories_xml, inject_into_message
 from agent_memory_fabric.read.pipeline import PipelineRetriever
+from agent_memory_fabric.read.reranker import LLMReranker
 from agent_memory_fabric.read.scorer import MultiSignalScorer, ScoredMemory
 from agent_memory_fabric.read.spaced_repetition import blend_with_review, select_review_candidates
 from agent_memory_fabric.storage.graph import extract_wikilinks, personalized_pagerank
@@ -54,6 +55,7 @@ class ProactiveGateway:
         self.enable_pipeline = enable_pipeline
         self.enable_spaced_repetition = enable_spaced_repetition
         self.pipeline_retriever = PipelineRetriever(total_budget_tokens=total_budget_tokens) if enable_pipeline else None
+        self.reranker: LLMReranker | None = None
 
     def retrieve(
         self,
@@ -132,6 +134,10 @@ class ProactiveGateway:
         # Post-retrieval abstain check
         if scored and self.abstain_gate.should_abstain_post_retrieval(scored[0].total_score):
             return []
+
+        # LLM reranker (before boosts — reranker operates on raw relevance)
+        if self.reranker and scored and len(scored) > self.reranker.top_k:
+            scored = self.reranker.rerank(message, scored)
 
         # Multiplicative boosts
         if self.enable_boosts and scored:

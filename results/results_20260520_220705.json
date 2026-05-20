@@ -1,0 +1,190 @@
+{
+  "flat": {
+    "condition": "flat",
+    "num_queries": 199,
+    "precision@5": 0.0,
+    "recall@5": 1.0,
+    "staleness_intrusion_rate": 0.0,
+    "qa_accuracy": 0.0352,
+    "token_efficiency": 0.0,
+    "memory_size": 419,
+    "per_category": {
+      "temporal": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 37
+      },
+      "open_ended": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 13
+      },
+      "single_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 32
+      },
+      "multi_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.1,
+        "count": 70
+      },
+      "knowledge_update": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 47
+      }
+    }
+  },
+  "continuous_decay": {
+    "condition": "continuous_decay",
+    "num_queries": 199,
+    "precision@5": 0.0,
+    "recall@5": 1.0,
+    "staleness_intrusion_rate": 0.0,
+    "qa_accuracy": 0.0352,
+    "token_efficiency": 0.0,
+    "memory_size": 419,
+    "per_category": {
+      "temporal": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 37
+      },
+      "open_ended": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 13
+      },
+      "single_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 32
+      },
+      "multi_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.1,
+        "count": 70
+      },
+      "knowledge_update": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 47
+      }
+    }
+  },
+  "lifecycle": {
+    "condition": "lifecycle",
+    "num_queries": 199,
+    "precision@5": 0.0,
+    "recall@5": 1.0,
+    "staleness_intrusion_rate": 0.0,
+    "qa_accuracy": 0.0101,
+    "token_efficiency": 0.0,
+    "memory_size": 419,
+    "per_category": {
+      "temporal": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 37
+      },
+      "open_ended": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 13
+      },
+      "single_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0625,
+        "count": 32
+      },
+      "multi_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 70
+      },
+      "knowledge_update": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 47
+      }
+    }
+  },
+  "semantic_lifecycle": {
+    "condition": "semantic_lifecycle",
+    "num_queries": 199,
+    "precision@5": 0.0,
+    "recall@5": 1.0,
+    "staleness_intrusion_rate": 0.0,
+    "qa_accuracy": 0.0,
+    "token_efficiency": 0.0,
+    "memory_size": 419,
+    "per_category": {
+      "temporal": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 37
+      },
+      "open_ended": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 13
+      },
+      "single_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 32
+      },
+      "multi_hop": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 70
+      },
+      "knowledge_update": {
+        "precision@5": 0.0,
+        "recall@5": 1.0,
+        "sir": 0.0,
+        "qa_accuracy": 0.0,
+        "count": 47
+      }
+    }
+  }
+}

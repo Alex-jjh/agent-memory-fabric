@@ -106,11 +106,16 @@ class WritePipeline:
         chunks = self.chunker.chunk_conversation(self._turn_buffer)
         created_ids: list[str] = []
 
+        existing_manifest = self._generate_manifest()
+
         for chunk in chunks:
             text = "\n".join(chunk.current_turns)
-            context = "\n".join(chunk.past_turns) if chunk.past_turns else None
+            past_context = "\n".join(chunk.past_turns) if chunk.past_turns else ""
+            context = past_context
+            if existing_manifest:
+                context = f"{past_context}\n\n<existing_memories>\n{existing_manifest}\nOnly extract NEW facts not already listed above.\n</existing_memories>" if past_context else f"<existing_memories>\n{existing_manifest}\nOnly extract NEW facts not already listed above.\n</existing_memories>"
 
-            results = self.extractor.extract(text, context=context)
+            results = self.extractor.extract(text, context=context or None)
 
             grounded = self._filter_grounded(results, chunk.current_turns)
 
@@ -160,6 +165,15 @@ class WritePipeline:
             name=result.suggested_name,
         )
         return node.id if node else None
+
+    def _generate_manifest(self) -> str:
+        """Generate manifest of existing memories for extraction context."""
+        from agent_memory_fabric.read.manifest import MemoryManifest
+        nodes = [n for n in self.engine.markdown_store.list_all() if n.is_retrievable()]
+        if not nodes:
+            return ""
+        manifest = MemoryManifest(max_lines=50)
+        return manifest.generate(nodes)
 
     @property
     def pending_turns(self) -> int:
