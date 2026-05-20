@@ -1,0 +1,4 @@
+# Ignore experiment output (large, reproducible)
+vault_*/
+*.json
+!.gitkeep
