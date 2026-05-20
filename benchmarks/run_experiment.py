@@ -285,14 +285,14 @@ def main():
     results = run_all_conditions(sessions, questions, args.output, config)
 
     # Print comparison table
-    print(f"\n{'='*60}")
+    print(f"\n{'='*72}")
     print("COMPARISON TABLE")
-    print(f"{'='*60}")
-    print(f"{'Metric':<25} {'Flat':<12} {'Decay':<12} {'Lifecycle':<12}")
-    print("-" * 61)
+    print(f"{'='*72}")
+    print(f"{'Metric':<25} {'Flat':<12} {'Decay':<12} {'Lifecycle':<12} {'Semantic':<12}")
+    print("-" * 73)
     for metric in ["precision@5", "staleness_intrusion_rate", "qa_accuracy", "memory_size"]:
         row = f"{metric:<25}"
-        for cond_name in ["flat", "continuous_decay", "lifecycle"]:
+        for cond_name in ["flat", "continuous_decay", "lifecycle", "semantic_lifecycle"]:
             if cond_name in results:
                 val = results[cond_name].to_dict().get(metric, "N/A")
                 row += f" {val:<12}"

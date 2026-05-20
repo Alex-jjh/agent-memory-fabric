@@ -15,6 +15,7 @@ from typing import Optional
 from agent_memory_fabric.core.config import AMFConfig, DecayConfig
 from agent_memory_fabric.core.engine import MemoryEngine
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode
+from agent_memory_fabric.llm.provider import LLMProvider, MockProvider
 
 
 class ExperimentCondition(ABC):
@@ -133,4 +134,53 @@ class LifecycleCondition(ExperimentCondition):
 
     def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
         # Default: exclude Archived and Expired (the discrete-state advantage)
+        return engine.search(query, top_k=top_k, include_archived=False)
+
+
+class SemanticLifecycleCondition(ExperimentCondition):
+    """Treatment D: LLM-assisted contradiction detection + lifecycle.
+
+    - After each session, detect contradictions between new and existing memories
+    - Only archive CONTRADICTED memories (semantically outdated)
+    - Also run time-based transitions as fallback
+    - This is the Paper 1 hypothesis: semantic-aware state transitions
+      outperform both time-based lifecycle and no lifecycle at all
+    """
+
+    name = "semantic_lifecycle"
+
+    def __init__(self, provider: LLMProvider | None = None):
+        self._provider = provider
+
+    @property
+    def provider(self) -> LLMProvider:
+        if self._provider is None:
+            self._provider = self._create_default_provider()
+        return self._provider
+
+    def _create_default_provider(self) -> LLMProvider:
+        return MockProvider(default_response="NO")
+
+    def create_engine(self, vault_path: Path) -> MemoryEngine:
+        config = AMFConfig(
+            vault_path=vault_path,
+            decay=DecayConfig(
+                model="ebbinghaus",
+                half_life_days=14.0,
+                forget_threshold=0.1,
+                promote_threshold=0.65,
+            ),
+        )
+        return MemoryEngine(config=config)
+
+    def after_session(self, engine: MemoryEngine) -> None:
+        engine.run_transitions()
+
+    def ingest_with_contradiction_check(
+        self, engine: MemoryEngine, content: str
+    ) -> list[tuple[str, str]]:
+        """Ingest content and archive any contradicted memories."""
+        return engine.detect_and_archive_contradictions(content, self.provider)
+
+    def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
         return engine.search(query, top_k=top_k, include_archived=False)

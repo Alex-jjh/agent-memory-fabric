@@ -81,6 +81,8 @@ class ExperimentHarness:
 
     def ingest_session(self, session: ConversationSession) -> list[str]:
         """Ingest a conversation session into memory. Returns IDs of created nodes."""
+        from benchmarks.conditions import SemanticLifecycleCondition
+
         created_ids = []
 
         for turn in session.turns:
@@ -90,8 +92,14 @@ class ExperimentHarness:
             if not utterance.strip() or len(utterance.split()) < 5:
                 continue
 
+            content = f"[{speaker}] {utterance}"
+
+            # Semantic condition: check contradictions before writing
+            if isinstance(self.condition, SemanticLifecycleCondition):
+                self.condition.ingest_with_contradiction_check(self.engine, content)
+
             node = self.engine.write(
-                content=f"[{speaker}] {utterance}",
+                content=content,
                 name=None,
                 tags=[f"session:{session.session_id}", f"speaker:{speaker}"],
             )
@@ -232,12 +240,14 @@ def run_all_conditions(
         ContinuousDecayCondition,
         FlatMemoryCondition,
         LifecycleCondition,
+        SemanticLifecycleCondition,
     )
 
     conditions = [
         FlatMemoryCondition(),
         ContinuousDecayCondition(),
         LifecycleCondition(),
+        SemanticLifecycleCondition(),
     ]
 
     all_results = {}
