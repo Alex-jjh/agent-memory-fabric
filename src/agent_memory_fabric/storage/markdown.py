@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,16 @@ from typing import Optional
 import yaml
 
 from agent_memory_fabric.core.node import LifecycleState, MemoryNode, MemoryType
+
+_UNSAFE_PATH_CHARS = re.compile(r"[^\w\s\-]", re.UNICODE)
+
+
+def _sanitize_path_component(name: str) -> str:
+    """Sanitize a string for safe use as a filesystem path component."""
+    name = name.replace("/", "-").replace("\\", "-").replace("\x00", "")
+    name = name.replace("..", "")
+    name = _UNSAFE_PATH_CHARS.sub("", name)
+    return name.strip(". ")[:100] or "unnamed"
 
 
 class MarkdownStore:
@@ -34,9 +45,15 @@ class MarkdownStore:
         (self.vault_path / "_sessions").mkdir(parents=True, exist_ok=True)
 
     def resolve_path(self, node: MemoryNode) -> Path:
+        safe_name = _sanitize_path_component(node.name)
         if node.project:
-            return self.vault_path / "projects" / node.project / f"{node.name}.md"
-        return self.vault_path / "_global" / f"{node.name}.md"
+            safe_project = _sanitize_path_component(node.project)
+            path = self.vault_path / "projects" / safe_project / f"{safe_name}.md"
+        else:
+            path = self.vault_path / "_global" / f"{safe_name}.md"
+        if not path.resolve().is_relative_to(self.vault_path.resolve()):
+            raise ValueError(f"Path traversal detected: {node.name}")
+        return path
 
     def _serialize(self, node: MemoryNode) -> str:
         frontmatter = {
@@ -130,7 +147,7 @@ class MarkdownStore:
                 self._id_to_path[node.id] = md_file
                 if node.id == node_id:
                     return node
-            except (ValueError, KeyError, TypeError):
+            except (ValueError, KeyError, TypeError, yaml.YAMLError):
                 continue
         return None
 
@@ -165,7 +182,7 @@ class MarkdownStore:
                 node = self.read_by_path(md_file)
                 self._id_to_path[node.id] = md_file
                 nodes.append(node)
-            except (ValueError, KeyError, TypeError):
+            except (ValueError, KeyError, TypeError, yaml.YAMLError):
                 continue
 
         return nodes

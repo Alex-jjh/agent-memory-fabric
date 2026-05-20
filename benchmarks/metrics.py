@@ -74,10 +74,17 @@ def staleness_intrusion_rate(
 
 
 def qa_accuracy_exact(retrieved: list[MemoryNode], gold_answer: str | int | float) -> bool:
-    """Check if any retrieved memory contains the gold answer (substring match)."""
+    """Check if any retrieved memory contains the gold answer (word-boundary match).
+
+    Uses word boundaries to prevent "no" matching "know", "another", etc.
+    """
+    import re
     gold_lower = str(gold_answer).lower().strip()
+    if not gold_lower:
+        return False
+    pattern = re.compile(r"\b" + re.escape(gold_lower) + r"\b", re.IGNORECASE)
     for node in retrieved:
-        if gold_lower in node.content.lower():
+        if pattern.search(node.content):
             return True
     return False
 

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     access_count INTEGER DEFAULT 0,
     decay_score REAL DEFAULT 1.0,
     strength REAL DEFAULT 1.0,
+    confidence_alpha REAL DEFAULT 1.0,
+    confidence_beta REAL DEFAULT 1.0,
     ttl TEXT,
     tags TEXT,
     file_path TEXT UNIQUE
@@ -82,8 +84,9 @@ class SQLiteStore:
         conn.execute(
             """INSERT OR REPLACE INTO nodes
                (id, name, state, type, project, created, modified, last_accessed,
-                access_count, decay_score, strength, ttl, tags, file_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                access_count, decay_score, strength, confidence_alpha, confidence_beta,
+                ttl, tags, file_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 node.id,
                 node.name,
@@ -96,6 +99,8 @@ class SQLiteStore:
                 node.access_count,
                 node.decay_score,
                 node.strength,
+                node.confidence_alpha,
+                node.confidence_beta,
                 node.ttl.isoformat() if node.ttl else None,
                 json.dumps(node.tags),
                 None,
@@ -203,10 +208,13 @@ class SQLiteStore:
 
     def reconcile(self, filesystem_nodes: list[MemoryNode]) -> None:
         conn = self._get_conn()
-        fs_ids = {node.id for node in filesystem_nodes}
         db_rows = conn.execute("SELECT id FROM nodes").fetchall()
         db_ids = {row["id"] for row in db_rows}
 
+        if not filesystem_nodes and db_ids:
+            return
+
+        fs_ids = {node.id for node in filesystem_nodes}
         to_delete = db_ids - fs_ids
         for node_id in to_delete:
             self.delete_node(node_id)

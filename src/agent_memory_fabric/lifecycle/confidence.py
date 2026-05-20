@@ -57,10 +57,14 @@ class BetaConfidence(BaseModel):
     @property
     def base_confidence(self) -> float:
         """Mean of the Beta distribution."""
-        return self.alpha / (self.alpha + self.beta_param)
+        total = self.alpha + self.beta_param
+        if total <= 0:
+            return 0.5
+        return self.alpha / total
 
     def record_outcome(self, success: bool, weight: float = 1.0) -> None:
         """Record an observation about this memory's usefulness."""
+        weight = max(0.0, weight)
         if success:
             self.alpha += weight
         else:

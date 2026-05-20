@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,8 @@ from agent_memory_fabric.lifecycle.transitions import (
     TTLExpirationPredicate,
 )
 from agent_memory_fabric.lifecycle.confidence import BetaConfidence
+from agent_memory_fabric.llm.contradiction import detect_contradictions
+from agent_memory_fabric.llm.provider import LLMProvider
 from agent_memory_fabric.read.embeddings import EmbeddingProvider
 from agent_memory_fabric.read.gateway import ProactiveGateway
 from agent_memory_fabric.read.scorer import MultiSignalScorer, ScoredMemory
@@ -47,6 +50,7 @@ class MemoryEngine:
             InactivityArchivePredicate(inactive_days=30),
         ]
         self._content_hashes: set[str] = set()
+        self._lock = threading.Lock()
 
         self._initialize()
 
@@ -81,6 +85,21 @@ class MemoryEngine:
         strength: float = 1.0,
     ) -> Optional[MemoryNode]:
         """Create and persist a new memory node. Returns None if content is a duplicate."""
+        with self._lock:
+            return self._write_inner(content, operation, project, name, tags, node_type, state, ttl, strength)
+
+    def _write_inner(
+        self,
+        content: str,
+        operation: WriteOperation | str | None,
+        project: str | None,
+        name: str | None,
+        tags: list[str] | None,
+        node_type: MemoryType | str,
+        state: LifecycleState,
+        ttl: datetime | None,
+        strength: float,
+    ) -> Optional[MemoryNode]:
         # Fast-path dedup via WriteRouter
         op = self.write_router.classify(content, existing_hashes=self._content_hashes)
         if op is None:
@@ -141,6 +160,10 @@ class MemoryEngine:
         reason: str | None = None,
     ) -> MemoryNode:
         """Manually trigger a state transition."""
+        with self._lock:
+            return self._transition_inner(node_id, target_state, reason)
+
+    def _transition_inner(self, node_id: str, target_state: LifecycleState | str, reason: str | None) -> MemoryNode:
         node = self.markdown_store.read(node_id)
         if node is None:
             raise ValueError(f"Node not found: {node_id}")
@@ -177,6 +200,32 @@ class MemoryEngine:
                     break
 
         return transitions_fired
+
+    def detect_and_archive_contradictions(
+        self,
+        new_content: str,
+        provider: LLMProvider,
+        scope: str | None = None,
+    ) -> list[tuple[str, str]]:
+        """Detect memories contradicted by new content and archive them.
+
+        Returns list of (node_id, reason) for each archived node.
+        """
+        all_nodes = self.markdown_store.list_all(scope=scope)
+        active_nodes = [n for n in all_nodes if n.state == LifecycleState.ACTIVE]
+
+        contradictions = detect_contradictions(new_content, active_nodes, provider)
+        archived: list[tuple[str, str]] = []
+
+        for node, reason in contradictions:
+            if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
+                self.state_machine.transition(node, LifecycleState.ARCHIVED)
+                node.modified = datetime.now(timezone.utc)
+                self.markdown_store.write(node)
+                self.sqlite_store.upsert_node(node, content=node.content)
+                archived.append((node.id, reason))
+
+        return archived
 
     def run_consolidation(self) -> int:
         """Merge duplicates and synthesize insights. Returns count of nodes affected."""
@@ -276,6 +325,7 @@ class MemoryEngine:
         results: list[MemoryNode] = []
         for sm in scored[:top_k]:
             sm.node.touch()
+            self.markdown_store.write(sm.node)
             self.sqlite_store.upsert_node(sm.node, content=sm.node.content)
             results.append(sm.node)
 

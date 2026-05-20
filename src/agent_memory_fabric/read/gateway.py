@@ -69,10 +69,15 @@ class ProactiveGateway:
             vec_results = self.sqlite_store.search_vector(query_embedding, limit=top_k * 3)
             if vec_results:
                 max_dist = max(d for _, d in vec_results) if vec_results else 1.0
-                vector_scores = {
-                    nid: max(0.0, 1.0 - dist / max_dist) if max_dist > 0 else 0.0
-                    for nid, dist in vec_results
-                }
+                min_dist = min(d for _, d in vec_results)
+                dist_range = max_dist - min_dist
+                if dist_range > 0:
+                    vector_scores = {
+                        nid: 1.0 - (dist - min_dist) / dist_range
+                        for nid, dist in vec_results
+                    }
+                else:
+                    vector_scores = {nid: 1.0 for nid, _ in vec_results}
 
         # Signal 5: Graph proximity via PPR
         graph_scores: dict[str, float] = {}

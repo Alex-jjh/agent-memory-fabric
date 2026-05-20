@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+import re
+
 from agent_memory_fabric.core.node import MemoryNode
 from agent_memory_fabric.llm.prompts import (
     CONTRADICTION_DETECTION_SYSTEM,
     CONTRADICTION_DETECTION_USER,
 )
 from agent_memory_fabric.llm.provider import LLMProvider
+
+_MAX_CONTENT_LENGTH = 2000
+
+
+def _sanitize_for_prompt(text: str) -> str:
+    """Sanitize text before inserting into LLM prompt to prevent injection."""
+    text = text[:_MAX_CONTENT_LENGTH]
+    text = text.replace("</new_info>", "").replace("</existing_memory>", "")
+    text = re.sub(r"</?(?:new_info|existing_memory|system|instruction)>", "", text)
+    return text
 
 
 def detect_contradictions(
@@ -33,11 +45,14 @@ def detect_contradictions(
 
     for node in candidates:
         user_prompt = CONTRADICTION_DETECTION_USER.format(
-            new_content=new_content,
-            existing_content=node.content,
+            new_content=_sanitize_for_prompt(new_content),
+            existing_content=_sanitize_for_prompt(node.content),
         )
 
-        response = provider.complete(CONTRADICTION_DETECTION_SYSTEM, user_prompt)
+        try:
+            response = provider.complete(CONTRADICTION_DETECTION_SYSTEM, user_prompt)
+        except Exception:
+            continue
         response = response.strip()
 
         if response.upper().startswith("YES"):

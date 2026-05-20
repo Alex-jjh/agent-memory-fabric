@@ -15,8 +15,9 @@ class DecayModel(str, Enum):
 
 def ebbinghaus_decay(hours_since_access: float, strength: float = 1.0) -> float:
     """Ebbinghaus forgetting curve: R = e^(-t / (S * stability))."""
-    stability = strength * 24.0  # strength=1.0 → 24h half-point
-    return math.exp(-hours_since_access / stability)
+    strength = max(0.01, strength)
+    stability = strength * 24.0
+    return math.exp(-max(0.0, hours_since_access) / stability)
 
 
 def power_law_decay(hours_since_access: float, strength: float = 1.0, exponent: float = 0.6) -> float:
@@ -30,7 +31,8 @@ def power_law_decay(hours_since_access: float, strength: float = 1.0, exponent: 
 
 def exponential_decay(hours_since_access: float, half_life_hours: float = 336.0) -> float:
     """Simple exponential decay with configurable half-life (default 14 days)."""
-    return math.exp(-0.693 * hours_since_access / half_life_hours)
+    half_life_hours = max(0.01, half_life_hours)
+    return math.exp(-math.log(2) * max(0.0, hours_since_access) / half_life_hours)
 
 
 def compute_decay(

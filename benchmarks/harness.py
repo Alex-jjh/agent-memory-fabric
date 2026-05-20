@@ -162,8 +162,8 @@ class ExperimentHarness:
             if simulate_time_gap and ids:
                 days_ago = (len(sessions) - i) * self.config.time_gap_between_sessions_hours / 24
                 self._backdate_memories(ids, days_ago)
-
-            self.condition.after_session(self.engine)
+                # Run transitions again after backdating (ingest_session already ran once)
+                self.condition.after_session(self.engine)
 
         # Phase 2: Evaluate
         results = []

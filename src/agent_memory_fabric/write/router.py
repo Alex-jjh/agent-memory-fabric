@@ -100,6 +100,10 @@ class WriteRouter:
                 last_accessed=now,
             )
 
+        if operation in (WriteOperation.BRANCH, WriteOperation.PROMOTE):
+            raise NotImplementedError(f"{operation.value} operation requires Phase 4 implementation")
+
+        # Default fallback: APPEND
         return MemoryNode(
             name=self._generate_name(content),
             content=content,

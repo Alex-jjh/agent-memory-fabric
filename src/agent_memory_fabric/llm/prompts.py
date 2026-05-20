@@ -19,10 +19,10 @@ Respond with EXACTLY one of:
 Do not explain further. One line only."""
 
 CONTRADICTION_DETECTION_USER = """NEW INFORMATION:
-{new_content}
+<new_info>{new_content}</new_info>
 
 EXISTING MEMORY:
-{existing_content}
+<existing_memory>{existing_content}</existing_memory>
 
 Does the new information contradict or supersede the existing memory?"""
 
