@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import re
+import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from agent_memory_fabric.core.node import MemoryNode
+import yaml
+
+from agent_memory_fabric.core.node import LifecycleState, MemoryNode, MemoryType
+
+WIKILINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def extract_wikilinks(content: str) -> list[str]:
+    return WIKILINK_PATTERN.findall(content)
 
 
 class MarkdownStore:
@@ -17,38 +29,143 @@ class MarkdownStore:
         ├── projects/
         │   └── {project}/    (Project scope memories)
         └── _sessions/        (Session scratch, auto-cleanup)
-
-    Each memory is one .md file:
-        ---
-        id: ...
-        name: ...
-        state: active
-        ...
-        ---
-        Content body here.
     """
 
     def __init__(self, vault_path: Path):
         self.vault_path = vault_path
+        self._id_to_path: dict[str, Path] = {}
 
-    def read(self, node_id: str) -> Optional[MemoryNode]:
-        """Read a memory node from its Markdown file."""
-        raise NotImplementedError("Phase 1")
-
-    def write(self, node: MemoryNode) -> Path:
-        """Write a memory node to a Markdown file. Returns the file path."""
-        raise NotImplementedError("Phase 1")
-
-    def delete(self, node_id: str) -> bool:
-        """Delete a memory file. Returns True if file existed."""
-        raise NotImplementedError("Phase 1")
-
-    def list_all(self, scope: str | None = None) -> list[MemoryNode]:
-        """List all memory nodes, optionally filtered by scope/project."""
-        raise NotImplementedError("Phase 1")
+    def _ensure_dirs(self) -> None:
+        (self.vault_path / "_global").mkdir(parents=True, exist_ok=True)
+        (self.vault_path / "projects").mkdir(parents=True, exist_ok=True)
+        (self.vault_path / "_sessions").mkdir(parents=True, exist_ok=True)
 
     def resolve_path(self, node: MemoryNode) -> Path:
-        """Determine file path for a node based on its scope."""
         if node.project:
             return self.vault_path / "projects" / node.project / f"{node.name}.md"
         return self.vault_path / "_global" / f"{node.name}.md"
+
+    def _serialize(self, node: MemoryNode) -> str:
+        frontmatter = {
+            "id": node.id,
+            "name": node.name,
+            "state": node.state.value,
+            "type": node.type.value,
+            "created": node.created.isoformat(),
+            "modified": node.modified.isoformat(),
+            "last_accessed": node.last_accessed.isoformat(),
+            "access_count": node.access_count,
+            "decay_score": node.decay_score,
+            "strength": node.strength,
+            "tags": node.tags,
+            "links": node.links,
+        }
+        if node.project:
+            frontmatter["project"] = node.project
+        if node.ttl:
+            frontmatter["ttl"] = node.ttl.isoformat()
+
+        fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return f"---\n{fm_str}---\n{node.content}\n"
+
+    def _deserialize(self, text: str, file_path: Path) -> MemoryNode:
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            raise ValueError(f"Invalid frontmatter in {file_path}")
+
+        fm_raw = parts[1].strip()
+        content = parts[2].strip()
+        data = yaml.safe_load(fm_raw)
+
+        return MemoryNode(
+            id=data["id"],
+            name=data["name"],
+            content=content,
+            state=LifecycleState(data.get("state", "active")),
+            type=MemoryType(data.get("type", "project")),
+            project=data.get("project"),
+            created=datetime.fromisoformat(data["created"]),
+            modified=datetime.fromisoformat(data["modified"]),
+            last_accessed=datetime.fromisoformat(data["last_accessed"]),
+            access_count=data.get("access_count", 0),
+            decay_score=data.get("decay_score", 1.0),
+            strength=data.get("strength", 1.0),
+            ttl=datetime.fromisoformat(data["ttl"]) if data.get("ttl") else None,
+            tags=data.get("tags", []),
+            links=data.get("links", []),
+        )
+
+    def write(self, node: MemoryNode) -> Path:
+        self._ensure_dirs()
+        file_path = self.resolve_path(node)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        content = self._serialize(node)
+
+        fd, tmp_path = tempfile.mkstemp(dir=file_path.parent, suffix=".tmp")
+        try:
+            os.write(fd, content.encode("utf-8"))
+            os.close(fd)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            os.close(fd) if not os.get_inheritable(fd) else None
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
+
+        self._id_to_path[node.id] = file_path
+        return file_path
+
+    def read(self, node_id: str) -> Optional[MemoryNode]:
+        if node_id in self._id_to_path:
+            path = self._id_to_path[node_id]
+            if path.exists():
+                return self.read_by_path(path)
+            else:
+                del self._id_to_path[node_id]
+
+        for md_file in self.vault_path.rglob("*.md"):
+            try:
+                node = self.read_by_path(md_file)
+                self._id_to_path[node.id] = md_file
+                if node.id == node_id:
+                    return node
+            except (ValueError, KeyError, TypeError):
+                continue
+        return None
+
+    def read_by_path(self, path: Path) -> MemoryNode:
+        text = path.read_text(encoding="utf-8")
+        return self._deserialize(text, path)
+
+    def delete(self, node_id: str) -> bool:
+        node = self.read(node_id)
+        if node is None:
+            return False
+        path = self._id_to_path.get(node_id)
+        if path and path.exists():
+            path.unlink()
+            del self._id_to_path[node_id]
+            return True
+        return False
+
+    def list_all(self, scope: str | None = None) -> list[MemoryNode]:
+        self._ensure_dirs()
+        nodes: list[MemoryNode] = []
+
+        if scope:
+            search_dir = self.vault_path / "projects" / scope
+        else:
+            search_dir = self.vault_path
+
+        for md_file in search_dir.rglob("*.md"):
+            if md_file.name.startswith("."):
+                continue
+            try:
+                node = self.read_by_path(md_file)
+                self._id_to_path[node.id] = md_file
+                nodes.append(node)
+            except (ValueError, KeyError, TypeError):
+                continue
+
+        return nodes
