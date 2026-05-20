@@ -8,3 +8,9 @@ build/
 .ruff_cache/
 *.db
 .amf/
+
+results/
+.coverage
+experiment_log.txt
+experiment_output.log
+scripts/
