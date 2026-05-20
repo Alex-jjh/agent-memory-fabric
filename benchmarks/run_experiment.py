@@ -55,11 +55,11 @@ def generate_synthetic_data(
         session_id="s1",
         timestamp=base_time,
         turns=[
-            {"speaker": "User", "utterance": "I live in Shanghai and work at Amazon as a software engineer."},
-            {"speaker": "Assistant", "utterance": "Got it! You're based in Shanghai working at Amazon as a software engineer."},
-            {"speaker": "User", "utterance": "I'm studying for the AWS SAA certification exam next month."},
-            {"speaker": "Assistant", "utterance": "Good luck with your AWS Solutions Architect exam!"},
-            {"speaker": "User", "utterance": "My favorite programming language is Python, I use it for everything."},
+            {"speaker": "User", "utterance": "I live in Shanghai and work at Amazon as a software engineer.", "dia_id": "D1:1"},
+            {"speaker": "Assistant", "utterance": "Got it! You're based in Shanghai working at Amazon as a software engineer.", "dia_id": "D1:2"},
+            {"speaker": "User", "utterance": "I'm studying for the AWS SAA certification exam next month.", "dia_id": "D1:3"},
+            {"speaker": "Assistant", "utterance": "Good luck with your AWS Solutions Architect exam!", "dia_id": "D1:4"},
+            {"speaker": "User", "utterance": "My favorite programming language is Python, I use it for everything.", "dia_id": "D1:5"},
         ],
     ))
 
@@ -68,11 +68,11 @@ def generate_synthetic_data(
         session_id="s2",
         timestamp=base_time + timedelta(days=7),
         turns=[
-            {"speaker": "User", "utterance": "I'm working on a memory system project called Agent Memory Fabric."},
-            {"speaker": "Assistant", "utterance": "Tell me more about Agent Memory Fabric."},
-            {"speaker": "User", "utterance": "It uses a lifecycle state machine with four states: Active, Decided, Archived, Expired."},
-            {"speaker": "Assistant", "utterance": "Interesting architecture! The four-state lifecycle model sounds well-designed."},
-            {"speaker": "User", "utterance": "My supervisor Brennan is guiding the research direction for my FYP."},
+            {"speaker": "User", "utterance": "I'm working on a memory system project called Agent Memory Fabric.", "dia_id": "D2:1"},
+            {"speaker": "Assistant", "utterance": "Tell me more about Agent Memory Fabric.", "dia_id": "D2:2"},
+            {"speaker": "User", "utterance": "It uses a lifecycle state machine with four states: Active, Decided, Archived, Expired.", "dia_id": "D2:3"},
+            {"speaker": "Assistant", "utterance": "Interesting architecture! The four-state lifecycle model sounds well-designed.", "dia_id": "D2:4"},
+            {"speaker": "User", "utterance": "My supervisor Brennan is guiding the research direction for my FYP.", "dia_id": "D2:5"},
         ],
     ))
 
@@ -81,11 +81,11 @@ def generate_synthetic_data(
         session_id="s3",
         timestamp=base_time + timedelta(days=30),
         turns=[
-            {"speaker": "User", "utterance": "I moved to Suzhou last week, no longer in Shanghai."},
-            {"speaker": "Assistant", "utterance": "Noted, you've relocated from Shanghai to Suzhou."},
-            {"speaker": "User", "utterance": "I passed my AWS SAA exam! Got certified last Tuesday."},
-            {"speaker": "Assistant", "utterance": "Congratulations on passing the AWS SAA certification!"},
-            {"speaker": "User", "utterance": "Now I'm preparing for the GRE exam for graduate school applications."},
+            {"speaker": "User", "utterance": "I moved to Suzhou last week, no longer in Shanghai.", "dia_id": "D3:1"},
+            {"speaker": "Assistant", "utterance": "Noted, you've relocated from Shanghai to Suzhou.", "dia_id": "D3:2"},
+            {"speaker": "User", "utterance": "I passed my AWS SAA exam! Got certified last Tuesday.", "dia_id": "D3:3"},
+            {"speaker": "Assistant", "utterance": "Congratulations on passing the AWS SAA certification!", "dia_id": "D3:4"},
+            {"speaker": "User", "utterance": "Now I'm preparing for the GRE exam for graduate school applications.", "dia_id": "D3:5"},
         ],
     ))
 
@@ -94,11 +94,11 @@ def generate_synthetic_data(
         session_id="s4",
         timestamp=base_time + timedelta(days=60),
         turns=[
-            {"speaker": "User", "utterance": "I decided to target CHI 2027 LBW for my first paper submission."},
-            {"speaker": "Assistant", "utterance": "CHI 2027 Late-Breaking Work is a great venue for your lifecycle paper."},
-            {"speaker": "User", "utterance": "The Paper 1 baseline will be a Claude Code clone with proactive retrieval."},
-            {"speaker": "Assistant", "utterance": "Strong baseline choice — testing lifecycle on top of an already-good system."},
-            {"speaker": "User", "utterance": "I also started using TypeScript for the Obsidian plugin part of AMF."},
+            {"speaker": "User", "utterance": "I decided to target CHI 2027 LBW for my first paper submission.", "dia_id": "D4:1"},
+            {"speaker": "Assistant", "utterance": "CHI 2027 Late-Breaking Work is a great venue for your lifecycle paper.", "dia_id": "D4:2"},
+            {"speaker": "User", "utterance": "The Paper 1 baseline will be a Claude Code clone with proactive retrieval.", "dia_id": "D4:3"},
+            {"speaker": "Assistant", "utterance": "Strong baseline choice — testing lifecycle on top of an already-good system.", "dia_id": "D4:4"},
+            {"speaker": "User", "utterance": "I also started using TypeScript for the Obsidian plugin part of AMF.", "dia_id": "D4:5"},
         ],
     ))
 
@@ -107,11 +107,11 @@ def generate_synthetic_data(
         session_id="s5",
         timestamp=base_time + timedelta(days=90),
         turns=[
-            {"speaker": "User", "utterance": "My GRE exam is scheduled for next month, still preparing."},
-            {"speaker": "Assistant", "utterance": "Good luck with your upcoming GRE!"},
-            {"speaker": "User", "utterance": "AMF now has 211 passing tests across all modules."},
-            {"speaker": "Assistant", "utterance": "Great test coverage for the project!"},
-            {"speaker": "User", "utterance": "Brennan approved the three-condition experimental design for Paper 1."},
+            {"speaker": "User", "utterance": "My GRE exam is scheduled for next month, still preparing.", "dia_id": "D5:1"},
+            {"speaker": "Assistant", "utterance": "Good luck with your upcoming GRE!", "dia_id": "D5:2"},
+            {"speaker": "User", "utterance": "AMF now has 211 passing tests across all modules.", "dia_id": "D5:3"},
+            {"speaker": "Assistant", "utterance": "Great test coverage for the project!", "dia_id": "D5:4"},
+            {"speaker": "User", "utterance": "Brennan approved the three-condition experimental design for Paper 1.", "dia_id": "D5:5"},
         ],
     ))
 
@@ -124,61 +124,61 @@ def generate_synthetic_data(
             question="Where does the user currently live?",
             gold_answer="Suzhou",
             category="temporal_update",
-            evidence_turns=["I moved to Suzhou last week"],
+            evidence_turns=["D3:1"],
         ),
         EvalQuestion(
             question="What city did the user previously live in?",
             gold_answer="Shanghai",
             category="historical",
-            evidence_turns=["I live in Shanghai"],
+            evidence_turns=["D1:1"],
         ),
         EvalQuestion(
             question="Has the user passed the AWS SAA exam?",
             gold_answer="yes",
             category="temporal_update",
-            evidence_turns=["I passed my AWS SAA exam"],
+            evidence_turns=["D3:3"],
         ),
         EvalQuestion(
             question="What is the user's current exam focus?",
             gold_answer="GRE",
             category="temporal_update",
-            evidence_turns=["I'm preparing for the GRE exam"],
+            evidence_turns=["D3:5"],
         ),
         EvalQuestion(
             question="What are the four lifecycle states in AMF?",
             gold_answer="Active, Decided, Archived, Expired",
             category="factual",
-            evidence_turns=["four states: Active, Decided, Archived, Expired"],
+            evidence_turns=["D2:3"],
         ),
         EvalQuestion(
             question="Who is the user's FYP supervisor?",
             gold_answer="Brennan",
             category="factual",
-            evidence_turns=["My supervisor Brennan"],
+            evidence_turns=["D2:5"],
         ),
         EvalQuestion(
             question="What venue is Paper 1 targeting?",
             gold_answer="CHI 2027 LBW",
             category="factual",
-            evidence_turns=["target CHI 2027 LBW"],
+            evidence_turns=["D4:1"],
         ),
         EvalQuestion(
             question="What is the Paper 1 baseline?",
             gold_answer="Claude Code clone",
             category="factual",
-            evidence_turns=["baseline will be a Claude Code clone"],
+            evidence_turns=["D4:3"],
         ),
         EvalQuestion(
             question="What programming language does the user prefer?",
             gold_answer="Python",
             category="preference",
-            evidence_turns=["favorite programming language is Python"],
+            evidence_turns=["D1:5"],
         ),
         EvalQuestion(
             question="Is the user still studying for AWS SAA?",
             gold_answer="no",
             category="temporal_update",
-            evidence_turns=["I passed my AWS SAA exam"],
+            evidence_turns=["D3:3"],
         ),
     ]
 
@@ -229,11 +229,10 @@ def load_locomo_data(
                 formatted_turns.append({
                     "speaker": turn.get("speaker", "Unknown"),
                     "utterance": turn.get("text", ""),
+                    "dia_id": turn.get("dia_id", ""),
                 })
 
             session_id = f"entry{entry_idx}_{sess_key}"
-            date_key = f"{sess_key}_date_time"
-            timestamp_str = conversation.get(date_key, "")
 
             sessions.append(ConversationSession(
                 session_id=session_id,
@@ -244,9 +243,10 @@ def load_locomo_data(
         for qa in entry.get("qa", []):
             cat_id = qa.get("category", 0)
             category_name = LOCOMO_CATEGORIES.get(cat_id, f"cat_{cat_id}")
+            gold = qa.get("answer", "") or qa.get("adversarial_answer", "")
             questions.append(EvalQuestion(
                 question=qa.get("question", ""),
-                gold_answer=qa.get("answer", ""),
+                gold_answer=str(gold),
                 category=category_name,
                 evidence_turns=qa.get("evidence", []),
             ))
@@ -263,6 +263,8 @@ def main():
     parser.add_argument("--sessions", type=int, default=5, help="Number of sessions (synthetic mode)")
     parser.add_argument("--questions", type=int, default=10, help="Number of questions (synthetic mode)")
     parser.add_argument("--max-entries", type=int, default=None, help="Limit LoCoMo entries (for quick testing)")
+    parser.add_argument("--provider", choices=["mock", "bedrock"], default="mock", help="LLM provider for semantic condition")
+    parser.add_argument("--time-gap", type=float, default=72.0, help="Hours between sessions (time simulation)")
     args = parser.parse_args()
 
     if not args.synthetic and not args.data:
@@ -281,22 +283,59 @@ def main():
 
     print(f"Sessions: {len(sessions)}, Questions: {len(questions)}")
 
-    config = ExperimentConfig(top_k=args.top_k)
-    results = run_all_conditions(sessions, questions, args.output, config)
+    # Select LLM provider
+    llm_provider = None
+    if args.provider == "bedrock":
+        from agent_memory_fabric.llm.provider import BedrockProvider
+        llm_provider = BedrockProvider()
+        print(f"LLM Provider: Bedrock ({llm_provider.model_id})")
+    else:
+        print("LLM Provider: Mock (semantic condition uses default NO)")
+
+    config = ExperimentConfig(top_k=args.top_k, time_gap_between_sessions_hours=args.time_gap)
+    results = run_all_conditions(sessions, questions, args.output, config, llm_provider=llm_provider)
 
     # Print comparison table
-    print(f"\n{'='*72}")
-    print("COMPARISON TABLE")
-    print(f"{'='*72}")
-    print(f"{'Metric':<25} {'Flat':<12} {'Decay':<12} {'Lifecycle':<12} {'Semantic':<12}")
-    print("-" * 73)
-    for metric in ["precision@5", "staleness_intrusion_rate", "qa_accuracy", "memory_size"]:
+    cond_names = ["flat", "continuous_decay", "lifecycle", "semantic_lifecycle"]
+    print(f"\n{'='*76}")
+    print("COMPARISON TABLE (Overall)")
+    print(f"{'='*76}")
+    print(f"{'Metric':<25} {'Flat':<13} {'Decay':<13} {'Lifecycle':<13} {'Semantic':<13}")
+    print("-" * 77)
+    for metric in ["qa_accuracy", "memory_size", "staleness_intrusion_rate", "precision@5"]:
         row = f"{metric:<25}"
-        for cond_name in ["flat", "continuous_decay", "lifecycle", "semantic_lifecycle"]:
+        for cond_name in cond_names:
             if cond_name in results:
                 val = results[cond_name].to_dict().get(metric, "N/A")
-                row += f" {val:<12}"
+                row += f" {str(val):<13}"
         print(row)
+
+    # Per-category QA accuracy
+    all_cats = set()
+    for m in results.values():
+        all_cats.update(m.per_category.keys())
+    if all_cats:
+        print(f"\n{'='*76}")
+        print("PER-CATEGORY QA ACCURACY")
+        print(f"{'='*76}")
+        print(f"{'Category':<25} {'Flat':<13} {'Decay':<13} {'Lifecycle':<13} {'Semantic':<13}")
+        print("-" * 77)
+        for cat in sorted(all_cats):
+            row = f"{cat:<25}"
+            for cond_name in cond_names:
+                if cond_name in results:
+                    cat_data = results[cond_name].per_category.get(cat, {})
+                    qa = cat_data.get("qa_accuracy", "N/A")
+                    n = cat_data.get("count", 0)
+                    row += f" {qa} (n={n})  " if isinstance(qa, float) else f" {'N/A':<13}"
+                else:
+                    row += f" {'N/A':<13}"
+            print(row)
+
+    # State distribution for lifecycle conditions
+    print(f"\n{'='*76}")
+    print("MEMORY STATE DISTRIBUTION")
+    print(f"{'='*76}")
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ from benchmarks.metrics import (
     ExperimentMetrics,
     memory_corpus_size,
     precision_at_k,
-    qa_accuracy_exact,
+    qa_accuracy,
     recall_at_k,
     staleness_intrusion_rate,
     token_efficiency,
@@ -39,7 +39,7 @@ from benchmarks.metrics import (
 class ConversationSession:
     """A conversation session from the dataset."""
     session_id: str
-    turns: list[dict]  # [{"speaker": "...", "utterance": "..."}]
+    turns: list[dict]  # [{"speaker": "...", "utterance": "...", "dia_id": "D1:3"}]
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -78,8 +78,9 @@ class ExperimentHarness:
         self.engine = condition.create_engine(vault_path)
         self._ingested_ids: list[str] = []
         self._stale_ids: set[str] = set()
+        self._dia_id_to_node_id: dict[str, str] = {}
 
-    def ingest_session(self, session: ConversationSession) -> list[str]:
+    def ingest_session(self, session: ConversationSession, run_after_session: bool = True) -> list[str]:
         """Ingest a conversation session into memory. Returns IDs of created nodes."""
         from benchmarks.conditions import SemanticLifecycleCondition
 
@@ -88,13 +89,13 @@ class ExperimentHarness:
         for turn in session.turns:
             speaker = turn.get("speaker", "unknown")
             utterance = turn.get("utterance", "")
+            dia_id = turn.get("dia_id", "")
 
             if not utterance.strip() or len(utterance.split()) < 5:
                 continue
 
             content = f"[{speaker}] {utterance}"
 
-            # Semantic condition: check contradictions before writing
             if isinstance(self.condition, SemanticLifecycleCondition):
                 self.condition.ingest_with_contradiction_check(self.engine, content)
 
@@ -105,9 +106,12 @@ class ExperimentHarness:
             )
             if node is not None:
                 created_ids.append(node.id)
+                if dia_id:
+                    self._dia_id_to_node_id[dia_id] = node.id
 
         self._ingested_ids.extend(created_ids)
-        self.condition.after_session(self.engine)
+        if run_after_session:
+            self.condition.after_session(self.engine)
         return created_ids
 
     def mark_stale(self, node_ids: set[str]) -> None:
@@ -118,19 +122,28 @@ class ExperimentHarness:
         """
         self._stale_ids.update(node_ids)
 
+    def resolve_evidence(self, question: EvalQuestion) -> set[str]:
+        """Map evidence turn references (e.g. 'D1:3') to ingested node IDs."""
+        resolved = set()
+        for ref in question.evidence_turns:
+            node_id = self._dia_id_to_node_id.get(ref)
+            if node_id:
+                resolved.add(node_id)
+        return resolved
+
     def evaluate_question(self, question: EvalQuestion) -> dict:
         """Retrieve memories for a question and compute metrics."""
         retrieved = self.condition.search(
             self.engine, question.question, top_k=self.config.top_k
         )
 
-        relevant_ids = question.relevant_memory_ids or set()
+        relevant_ids = question.relevant_memory_ids or self.resolve_evidence(question)
         stale_ids = question.stale_memory_ids or self._stale_ids
 
         p_at_k = precision_at_k(retrieved, relevant_ids, self.config.top_k)
         r_at_k = recall_at_k(retrieved, relevant_ids, self.config.top_k)
         sir = staleness_intrusion_rate(retrieved, stale_ids, self.config.top_k)
-        qa_correct = qa_accuracy_exact(retrieved, question.gold_answer)
+        qa_correct = qa_accuracy(retrieved, question.gold_answer)
         tok_eff = token_efficiency(retrieved, relevant_ids)
 
         return {
@@ -155,21 +168,30 @@ class ExperimentHarness:
         If simulate_time_gap=True, artificially ages memories between sessions
         by backdating their last_accessed times to simulate temporal spread.
         """
+        import sys
+        total_sessions = len(sessions)
+
         # Phase 1: Ingest with simulated time gaps
         for i, session in enumerate(sessions):
-            ids = self.ingest_session(session)
+            ids = self.ingest_session(session, run_after_session=not simulate_time_gap)
+            print(f"\r  Ingesting: {i+1}/{total_sessions} sessions, {len(self._ingested_ids)} nodes", end="", flush=True)
 
             if simulate_time_gap and ids:
                 days_ago = (len(sessions) - i) * self.config.time_gap_between_sessions_hours / 24
                 self._backdate_memories(ids, days_ago)
-                # Run transitions again after backdating (ingest_session already ran once)
                 self.condition.after_session(self.engine)
+
+        print()
 
         # Phase 2: Evaluate
         results = []
-        for q in questions:
+        total_q = len(questions)
+        for i, q in enumerate(questions):
             result = self.evaluate_question(q)
             results.append(result)
+            if (i + 1) % 10 == 0 or i == total_q - 1:
+                print(f"\r  Evaluating: {i+1}/{total_q} questions", end="", flush=True)
+        print()
 
         # Phase 3: Aggregate
         return self._aggregate_metrics(results)
@@ -234,8 +256,9 @@ def run_all_conditions(
     questions: list[EvalQuestion],
     output_dir: Path,
     config: ExperimentConfig | None = None,
+    llm_provider=None,
 ) -> dict[str, ExperimentMetrics]:
-    """Run all three conditions and save results."""
+    """Run all four conditions and save results."""
     from benchmarks.conditions import (
         ContinuousDecayCondition,
         FlatMemoryCondition,
@@ -247,7 +270,7 @@ def run_all_conditions(
         FlatMemoryCondition(),
         ContinuousDecayCondition(),
         LifecycleCondition(),
-        SemanticLifecycleCondition(),
+        SemanticLifecycleCondition(provider=llm_provider),
     ]
 
     all_results = {}

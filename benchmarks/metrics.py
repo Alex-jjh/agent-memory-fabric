@@ -49,7 +49,7 @@ def precision_at_k(retrieved: list[MemoryNode], relevant_ids: set[str], k: int =
 def recall_at_k(retrieved: list[MemoryNode], relevant_ids: set[str], k: int = 5) -> float:
     """Fraction of relevant items that appear in top-K results."""
     if not relevant_ids:
-        return 1.0  # vacuously true
+        return 0.0
     top_k = retrieved[:k]
     found = sum(1 for n in top_k if n.id in relevant_ids)
     return found / len(relevant_ids)
@@ -73,18 +73,54 @@ def staleness_intrusion_rate(
     return stale_in_top_k / len(top_k)
 
 
-def qa_accuracy_exact(retrieved: list[MemoryNode], gold_answer: str | int | float) -> bool:
-    """Check if any retrieved memory contains the gold answer (word-boundary match).
-
-    Uses word boundaries to prevent "no" matching "know", "another", etc.
-    """
+def _normalize_tokens(text: str) -> list[str]:
+    """Lowercase, strip punctuation, split into tokens."""
     import re
-    gold_lower = str(gold_answer).lower().strip()
-    if not gold_lower:
+    return re.findall(r"\w+", text.lower())
+
+
+def token_f1(prediction_text: str, gold_answer: str) -> float:
+    """Compute token-level F1 between a prediction text and gold answer."""
+    pred_tokens = _normalize_tokens(prediction_text)
+    gold_tokens = _normalize_tokens(gold_answer)
+    if not gold_tokens or not pred_tokens:
+        return 0.0
+    common = set(pred_tokens) & set(gold_tokens)
+    if not common:
+        return 0.0
+    precision = len(common) / len(pred_tokens)
+    recall = len(common) / len(gold_tokens)
+    return 2 * precision * recall / (precision + recall)
+
+
+def token_recall(context_text: str, gold_answer: str) -> float:
+    """Fraction of gold answer tokens present in the context text.
+
+    This is the right metric for retrieval QA: does the retrieved context
+    contain the information needed to answer? We don't penalize extra tokens
+    in the context (that's what precision@k is for).
+    """
+    context_tokens = set(_normalize_tokens(context_text))
+    gold_tokens = _normalize_tokens(gold_answer)
+    if not gold_tokens:
+        return 0.0
+    found = sum(1 for t in gold_tokens if t in context_tokens)
+    return found / len(gold_tokens)
+
+
+def qa_accuracy(retrieved: list[MemoryNode], gold_answer: str | None, threshold: float = 0.8) -> bool:
+    """Check if any retrieved memory contains enough of the gold answer to support it.
+
+    Uses token recall: what fraction of gold answer tokens appear in the retrieved text.
+    Threshold 0.8 means at least 80% of gold tokens must be present.
+    """
+    if gold_answer is None:
         return False
-    pattern = re.compile(r"\b" + re.escape(gold_lower) + r"\b", re.IGNORECASE)
+    gold = str(gold_answer).strip()
+    if not gold:
+        return False
     for node in retrieved:
-        if pattern.search(node.content):
+        if token_recall(node.content, gold) >= threshold:
             return True
     return False
 
@@ -102,8 +138,10 @@ def token_efficiency(retrieved: list[MemoryNode], relevant_ids: set[str]) -> flo
 
 
 def memory_corpus_size(engine) -> int:
-    """Total number of memory nodes in the store."""
-    return len(engine.list_nodes())
+    """Number of searchable memory nodes (active + decided, excludes archived/expired)."""
+    active = len(engine.list_nodes(state="active"))
+    decided = len(engine.list_nodes(state="decided"))
+    return active + decided
 
 
 @dataclass
