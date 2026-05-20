@@ -103,6 +103,7 @@ class ExperimentHarness:
                 content=content,
                 name=None,
                 tags=[f"session:{session.session_id}", f"speaker:{speaker}"],
+                skip_secret_scan=True,
             )
             if node is not None:
                 created_ids.append(node.id)

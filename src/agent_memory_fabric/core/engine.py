@@ -88,10 +88,11 @@ class MemoryEngine:
         state: LifecycleState = LifecycleState.ACTIVE,
         ttl: datetime | None = None,
         strength: float = 1.0,
+        skip_secret_scan: bool = False,
     ) -> Optional[MemoryNode]:
         """Create and persist a new memory node. Returns None if content is a duplicate."""
         with self._lock:
-            return self._write_inner(content, operation, project, name, tags, node_type, state, ttl, strength)
+            return self._write_inner(content, operation, project, name, tags, node_type, state, ttl, strength, skip_secret_scan)
 
     def _write_inner(
         self,
@@ -104,11 +105,13 @@ class MemoryEngine:
         state: LifecycleState,
         ttl: datetime | None,
         strength: float,
+        skip_secret_scan: bool = False,
     ) -> Optional[MemoryNode]:
         # Secret scan gate
-        secret_matches = scan_for_secrets(content)
-        if secret_matches:
-            raise SecretDetectedError(secret_matches)
+        if not skip_secret_scan:
+            secret_matches = scan_for_secrets(content)
+            if secret_matches:
+                raise SecretDetectedError(secret_matches)
 
         # Fast-path dedup via WriteRouter
         op = self.write_router.classify(content, existing_hashes=self._content_hashes)
@@ -338,8 +341,14 @@ class MemoryEngine:
         top_k: int = 5,
         scope: str | None = None,
         include_archived: bool = False,
+        touch: bool = True,
     ) -> list[MemoryNode]:
-        """Search memories using multi-signal scoring (BM25 + recency + frequency)."""
+        """Search memories using multi-signal scoring (BM25 + recency + frequency).
+
+        Args:
+            touch: If True, update last_accessed on retrieved nodes. Set False for
+                   read-only evaluation to avoid mutating state during benchmarks.
+        """
         fts_results = self.sqlite_store.search_fts(query, limit=top_k * 5)
 
         fts_node_ids = {node_id for node_id, _ in fts_results}
@@ -366,9 +375,10 @@ class MemoryEngine:
 
         results: list[MemoryNode] = []
         for sm in scored[:top_k]:
-            sm.node.touch()
-            self.markdown_store.write(sm.node)
-            self.sqlite_store.upsert_node(sm.node, content=sm.node.content)
+            if touch:
+                sm.node.touch()
+                self.markdown_store.write(sm.node)
+                self.sqlite_store.upsert_node(sm.node, content=sm.node.content)
             results.append(sm.node)
 
         return results

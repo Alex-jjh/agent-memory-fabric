@@ -35,7 +35,7 @@ class ExperimentCondition(ABC):
 
     def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
         """Retrieve memories for a query under this condition's rules."""
-        return engine.search(query, top_k=top_k)
+        return engine.search(query, top_k=top_k, touch=False)
 
 
 class FlatMemoryCondition(ExperimentCondition):
@@ -97,7 +97,7 @@ class ContinuousDecayCondition(ExperimentCondition):
 
     def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
         # Include ALL memories regardless of state (decay only affects ranking)
-        return engine.search(query, top_k=top_k, include_archived=True)
+        return engine.search(query, top_k=top_k, include_archived=True, touch=False)
 
 
 class LifecycleCondition(ExperimentCondition):
@@ -134,7 +134,7 @@ class LifecycleCondition(ExperimentCondition):
 
     def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
         # Default: exclude Archived and Expired (the discrete-state advantage)
-        return engine.search(query, top_k=top_k, include_archived=False)
+        return engine.search(query, top_k=top_k, include_archived=False, touch=False)
 
 
 class SemanticLifecycleCondition(ExperimentCondition):
@@ -183,4 +183,4 @@ class SemanticLifecycleCondition(ExperimentCondition):
         return engine.detect_and_archive_contradictions(content, self.provider)
 
     def search(self, engine: MemoryEngine, query: str, top_k: int = 5) -> list[MemoryNode]:
-        return engine.search(query, top_k=top_k, include_archived=False)
+        return engine.search(query, top_k=top_k, include_archived=False, touch=False)
