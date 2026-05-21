@@ -84,6 +84,10 @@ class MarkdownStore:
             frontmatter["is_anti_pattern"] = node.is_anti_pattern
         if node.superseded_by:
             frontmatter["superseded_by"] = node.superseded_by
+        if node.valid_at:
+            frontmatter["valid_at"] = node.valid_at.isoformat()
+        if node.invalid_at:
+            frontmatter["invalid_at"] = node.invalid_at.isoformat()
 
         fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return f"---\n{fm_str}---\n{node.content}\n"
@@ -119,6 +123,8 @@ class MarkdownStore:
             recent_outcomes=data.get("recent_outcomes", []),
             is_anti_pattern=data.get("is_anti_pattern", False),
             superseded_by=data.get("superseded_by"),
+            valid_at=datetime.fromisoformat(data["valid_at"]) if data.get("valid_at") else None,
+            invalid_at=datetime.fromisoformat(data["invalid_at"]) if data.get("invalid_at") else None,
         )
 
     def write(self, node: MemoryNode) -> Path:

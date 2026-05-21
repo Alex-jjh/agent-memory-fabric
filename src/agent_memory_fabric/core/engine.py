@@ -318,6 +318,7 @@ class MemoryEngine:
                 self.state_machine.transition(node, LifecycleState.ARCHIVED)
                 node.modified = datetime.now(timezone.utc)
                 node.superseded_by = "direct_contradiction"
+                node.invalid_at = datetime.now(timezone.utc)
                 self.markdown_store.write(node)
                 self.sqlite_store.upsert_node(node, content=node.content)
                 archived.append((node.id, node.content))
@@ -334,6 +335,7 @@ class MemoryEngine:
                     self.state_machine.transition(node, LifecycleState.ARCHIVED)
                     node.modified = datetime.now(timezone.utc)
                     node.superseded_by = "cascade_invalidation"
+                    node.invalid_at = datetime.now(timezone.utc)
                     self.markdown_store.write(node)
                     self.sqlite_store.upsert_node(node, content=node.content)
                     cascade_archived.append((node.id, reason))
