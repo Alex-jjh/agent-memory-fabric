@@ -14,3 +14,6 @@ results/
 experiment_log.txt
 experiment_output.log
 scripts/
+
+# Benchmarks moved to amf-experiments/
+benchmarks/
