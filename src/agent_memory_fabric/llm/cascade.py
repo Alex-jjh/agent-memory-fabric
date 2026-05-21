@@ -103,7 +103,7 @@ def find_cascade_candidates(
         if not keywords:
             continue
 
-        query = " OR ".join(f'"{k}"' for k in keywords[:5])
+        query = " ".join(keywords[:5])
         try:
             fts_results = sqlite_store.search_fts(query, limit=max_per_domain)
             node_ids = {nid for nid, _ in fts_results}

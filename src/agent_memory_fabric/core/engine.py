@@ -312,6 +312,7 @@ class MemoryEngine:
             sqlite_store=self.sqlite_store,
         )
         archived: list[tuple[str, str]] = []
+        archived_with_content: list[tuple[str, str]] = []
 
         for node, reason in contradictions:
             if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
@@ -321,24 +322,28 @@ class MemoryEngine:
                 node.invalid_at = datetime.now(timezone.utc)
                 self.markdown_store.write(node)
                 self.sqlite_store.upsert_node(node, content=node.content)
-                archived.append((node.id, node.content))
+                archived.append((node.id, reason))
+                archived_with_content.append((node.id, node.content))
 
         cascade_archived: list[tuple[str, str]] = []
-        if enable_cascade and archived:
-            from agent_memory_fabric.llm.cascade import detect_cascade_contradictions
-            remaining_active = [n for n in active_nodes if n.id not in {nid for nid, _ in archived}]
-            cascade_results = detect_cascade_contradictions(
-                new_content, archived, remaining_active, provider, self.sqlite_store,
-            )
-            for node, reason in cascade_results:
-                if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
-                    self.state_machine.transition(node, LifecycleState.ARCHIVED)
-                    node.modified = datetime.now(timezone.utc)
-                    node.superseded_by = "cascade_invalidation"
-                    node.invalid_at = datetime.now(timezone.utc)
-                    self.markdown_store.write(node)
-                    self.sqlite_store.upsert_node(node, content=node.content)
-                    cascade_archived.append((node.id, reason))
+        if enable_cascade and archived_with_content:
+            try:
+                from agent_memory_fabric.llm.cascade import detect_cascade_contradictions
+                remaining_active = [n for n in active_nodes if n.id not in {nid for nid, _ in archived}]
+                cascade_results = detect_cascade_contradictions(
+                    new_content, archived_with_content, remaining_active, provider, self.sqlite_store,
+                )
+                for node, reason in cascade_results:
+                    if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
+                        self.state_machine.transition(node, LifecycleState.ARCHIVED)
+                        node.modified = datetime.now(timezone.utc)
+                        node.superseded_by = "cascade_invalidation"
+                        node.invalid_at = datetime.now(timezone.utc)
+                        self.markdown_store.write(node)
+                        self.sqlite_store.upsert_node(node, content=node.content)
+                        cascade_archived.append((node.id, reason))
+            except Exception:
+                pass  # Direct results preserved even if cascade fails
 
         return {"direct": archived, "cascade": cascade_archived}
 
