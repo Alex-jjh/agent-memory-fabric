@@ -15,5 +15,9 @@ experiment_log.txt
 experiment_output.log
 scripts/
 
-# Benchmarks moved to amf-experiments/
+# Research docs and benchmarks moved to amf-experiments/
 benchmarks/
+analysis/
+discussion-files/
+spec/
+PLAN.md
