@@ -82,6 +82,8 @@ class MarkdownStore:
             frontmatter["recent_outcomes"] = node.recent_outcomes
         if node.is_anti_pattern:
             frontmatter["is_anti_pattern"] = node.is_anti_pattern
+        if node.superseded_by:
+            frontmatter["superseded_by"] = node.superseded_by
 
         fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return f"---\n{fm_str}---\n{node.content}\n"
@@ -116,6 +118,7 @@ class MarkdownStore:
             applicable_domains=data.get("applicable_domains", []),
             recent_outcomes=data.get("recent_outcomes", []),
             is_anti_pattern=data.get("is_anti_pattern", False),
+            superseded_by=data.get("superseded_by"),
         )
 
     def write(self, node: MemoryNode) -> Path:

@@ -297,10 +297,11 @@ class MemoryEngine:
         provider: LLMProvider,
         scope: str | None = None,
         embedding_provider: "EmbeddingProvider | None" = None,
-    ) -> list[tuple[str, str]]:
+        enable_cascade: bool = False,
+    ) -> dict[str, list[tuple[str, str]]]:
         """Detect memories contradicted by new content and archive them.
 
-        Returns list of (node_id, reason) for each archived node.
+        Returns dict with 'direct' and 'cascade' lists of (node_id, reason).
         """
         all_nodes = self.markdown_store.list_all(scope=scope)
         active_nodes = [n for n in all_nodes if n.state == LifecycleState.ACTIVE]
@@ -316,11 +317,28 @@ class MemoryEngine:
             if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
                 self.state_machine.transition(node, LifecycleState.ARCHIVED)
                 node.modified = datetime.now(timezone.utc)
+                node.superseded_by = "direct_contradiction"
                 self.markdown_store.write(node)
                 self.sqlite_store.upsert_node(node, content=node.content)
-                archived.append((node.id, reason))
+                archived.append((node.id, node.content))
 
-        return archived
+        cascade_archived: list[tuple[str, str]] = []
+        if enable_cascade and archived:
+            from agent_memory_fabric.llm.cascade import detect_cascade_contradictions
+            remaining_active = [n for n in active_nodes if n.id not in {nid for nid, _ in archived}]
+            cascade_results = detect_cascade_contradictions(
+                new_content, archived, remaining_active, provider, self.sqlite_store,
+            )
+            for node, reason in cascade_results:
+                if self.state_machine.can_transition(node, LifecycleState.ARCHIVED):
+                    self.state_machine.transition(node, LifecycleState.ARCHIVED)
+                    node.modified = datetime.now(timezone.utc)
+                    node.superseded_by = "cascade_invalidation"
+                    self.markdown_store.write(node)
+                    self.sqlite_store.upsert_node(node, content=node.content)
+                    cascade_archived.append((node.id, reason))
+
+        return {"direct": archived, "cascade": cascade_archived}
 
     def run_trim(self, max_count: int | None = None) -> int:
         """Trim lowest-value memories if corpus exceeds capacity. Returns count trimmed."""

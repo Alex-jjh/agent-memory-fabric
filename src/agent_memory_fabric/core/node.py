@@ -55,6 +55,7 @@ class MemoryNode(BaseModel):
     applicable_domains: list[str] = Field(default_factory=list)
     recent_outcomes: list[dict] = Field(default_factory=list)
     is_anti_pattern: bool = False
+    superseded_by: str | None = None
 
     def is_retrievable(self, include_archived: bool = False) -> bool:
         if self.state == LifecycleState.EXPIRED:

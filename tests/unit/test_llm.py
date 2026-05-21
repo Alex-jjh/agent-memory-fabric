@@ -99,14 +99,13 @@ class TestEngineContradictionIntegration:
         mock = MockProvider()
         mock.set_response_for("shanghai", "YES: location changed")
 
-        archived = engine.detect_and_archive_contradictions(
+        result = engine.detect_and_archive_contradictions(
             "I moved to Suzhou last week", mock
         )
 
-        assert len(archived) == 1
-        assert "location" in archived[0][1].lower() or len(archived[0][0]) > 0
-
-        node = engine.read(archived[0][0])
+        assert len(result["direct"]) == 1
+        node_id = result["direct"][0][0]
+        node = engine.read(node_id)
         assert node.state == LifecycleState.ARCHIVED
 
     def test_no_contradictions_leaves_nodes_active(self, tmp_path):
@@ -116,8 +115,8 @@ class TestEngineContradictionIntegration:
         engine.write("User prefers dark mode", name="pref")
 
         mock = MockProvider(default_response="NO")
-        archived = engine.detect_and_archive_contradictions("I also like vim", mock)
-        assert archived == []
+        result = engine.detect_and_archive_contradictions("I also like vim", mock)
+        assert result["direct"] == []
 
         node_data = engine.list_nodes()
         assert all(n["state"] == "active" for n in node_data)
