@@ -50,7 +50,7 @@ class MemoryEngine:
             ),
             TemporalDecayPredicate(
                 decay_threshold=self.config.decay.forget_threshold,
-                min_inactive_days=14,
+                min_inactive_days=30,
             ),
             InactivityArchivePredicate(inactive_days=30),
         ]

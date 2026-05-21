@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 
 
 class DecayConfig(BaseModel):
-    model: str = "ebbinghaus"  # ebbinghaus | power_law | exponential
-    half_life_days: float = 14.0
+    model: str = "ebbinghaus"  # ebbinghaus | power_law | exponential | gaussian
+    half_life_days: float = 30.0
     forget_threshold: float = 0.05
     promote_threshold: float = 0.65
 

@@ -113,7 +113,7 @@ class LifecycleCondition(ExperimentCondition):
 
     name = "lifecycle"
 
-    def __init__(self, forget_threshold: float = 0.1, min_inactive_days: int = 14):
+    def __init__(self, forget_threshold: float = 0.05, min_inactive_days: int = 30):
         self.forget_threshold = forget_threshold
         self.min_inactive_days = min_inactive_days
 
@@ -122,7 +122,7 @@ class LifecycleCondition(ExperimentCondition):
             vault_path=vault_path,
             decay=DecayConfig(
                 model="ebbinghaus",
-                half_life_days=14.0,
+                half_life_days=30.0,
                 forget_threshold=self.forget_threshold,
                 promote_threshold=0.65,
             ),
@@ -166,8 +166,8 @@ class SemanticLifecycleCondition(ExperimentCondition):
             vault_path=vault_path,
             decay=DecayConfig(
                 model="ebbinghaus",
-                half_life_days=14.0,
-                forget_threshold=0.1,
+                half_life_days=30.0,
+                forget_threshold=0.05,
                 promote_threshold=0.65,
             ),
         )
